@@ -1,5 +1,5 @@
 ---
-trigger: always_on
+trigger: manual
 description: "Rules for Git commits and repository management"
 ---
 

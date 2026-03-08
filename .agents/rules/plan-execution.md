@@ -1,6 +1,5 @@
 ---
-trigger: always_on
-glob: "**/*"
+trigger: manual
 description: "Rules for following the implementation plans and roadmaps"
 ---
 

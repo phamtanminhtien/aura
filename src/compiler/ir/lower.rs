@@ -214,7 +214,7 @@ impl Lowerer {
                     params,
                     return_ty: _,
                     body,
-                    is_async,
+                    is_async: _is_async,
                     span: _,
                     doc: _,
                 } => {
@@ -702,8 +702,6 @@ impl Lowerer {
                     vec![val_op, Operand::Constant(1)],
                 )
             }
-            Expr::Error(_) => panic!("Compiler bug: reaching error node in lowerer"),
-            Expr::Template(_, _) => todo!("Implement IR lowering for template strings"),
         }
     }
 

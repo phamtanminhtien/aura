@@ -445,7 +445,7 @@ impl SemanticAnalyzer {
         let ty = match expr {
             Expr::Number(_, _) => Type::Int32,
             Expr::StringLiteral(_, _) => Type::String,
-            Expr::Template(parts, s) => {
+            Expr::Template(parts, _s) => {
                 for part in parts {
                     if let crate::compiler::ast::TemplatePart::Expr(e) = part {
                         self.check_expr(*e);
@@ -453,7 +453,7 @@ impl SemanticAnalyzer {
                 }
                 Type::String
             }
-            Expr::Await(expr, s) => {
+            Expr::Await(expr, _s) => {
                 let ty = self.check_expr(*expr);
                 // Basic validation: await target should be a Promise (or any for now)
                 // For now, we just return the inner type if it's a Promise, or the type itself
@@ -464,7 +464,7 @@ impl SemanticAnalyzer {
                     _ => ty, // Fallback
                 }
             }
-            Expr::Error(s) => Type::Unknown,
+            Expr::Error(_s) => Type::Unknown,
             Expr::Variable(name, span) => {
                 if let Some(sym) = self.scope.lookup(&name) {
                     if let Some(doc) = &sym.doc {
@@ -704,7 +704,6 @@ impl SemanticAnalyzer {
                     Type::Unknown
                 }
             }
-            Expr::Error(_) => Type::Unknown,
         };
         self.node_types.insert(span, ty.clone());
         ty

@@ -285,7 +285,7 @@ impl Interpreter {
             Expr::BinaryOp(lhs, op, rhs, _) => {
                 let left = self.eval_expr(*lhs);
                 let right = self.eval_expr(*rhs);
-                match (left, right) {
+                match (&left, &right) {
                     (Value::Int(l), Value::Int(r)) => match op.as_str() {
                         "+" => Value::Int(l + r),
                         "-" => Value::Int(l - r),
@@ -298,9 +298,15 @@ impl Interpreter {
                         "<=" => Value::Boolean(l <= r),
                         ">" => Value::Boolean(l > r),
                         ">=" => Value::Boolean(l >= r),
-                        _ => panic!("Unsupported operator {}", op),
+                        _ => panic!("Unsupported operator {} for integers", op),
                     },
-                    _ => panic!("Operands must be integers for binary op"),
+                    (Value::String(l), Value::String(r)) => match op.as_str() {
+                        "+" => Value::String(format!("{}{}", l, r)),
+                        "==" => Value::Boolean(l == r),
+                        "!=" => Value::Boolean(l != r),
+                        _ => panic!("Unsupported operator {} for strings", op),
+                    },
+                    _ => panic!("Operands must be same type (integers or strings) for binary op, got {:?} and {:?}", left, right),
                 }
             }
             Expr::Assign(name, val_expr, _) => {

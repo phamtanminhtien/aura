@@ -149,3 +149,4 @@ e2e_test!(
 );
 e2e_test!(test_20_class_method_chain, "20_class_method_chain.aura");
 e2e_test!(test_21_template_literal, "21_template_literal.aura");
+e2e_test!(test_22_async_test, "22_async_test.aura");
