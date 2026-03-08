@@ -1,11 +1,24 @@
+use crate::compiler::ast::{Program, Span};
+use crate::compiler::frontend::error::Severity;
 use crate::compiler::frontend::lexer::Lexer;
 use crate::compiler::frontend::parser::Parser;
+use crate::compiler::sema::checker::SemanticAnalyzer;
+use crate::compiler::sema::ty::Type;
+use std::collections::HashMap;
+use std::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
+pub struct DocumentState {
+    pub source: String,
+    pub program: Option<Program>,
+    pub node_types: HashMap<Span, Type>,
+}
+
 pub struct Backend {
     client: Client,
+    documents: Mutex<HashMap<Url, DocumentState>>,
 }
 
 #[tower_lsp::async_trait]
@@ -35,9 +48,6 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.client
-            .log_message(MessageType::INFO, "file opened!")
-            .await;
         self.on_change(TextDocumentItem {
             uri: params.text_document.uri,
             text: params.text_document.text,
@@ -57,7 +67,50 @@ impl LanguageServer for Backend {
         .await;
     }
 
-    async fn hover(&self, _: HoverParams) -> Result<Option<Hover>> {
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let docs = self.documents.lock().unwrap();
+        if let Some(state) = docs.get(&uri) {
+            // Find the most specific span containing the position
+            let mut best_span: Option<Span> = None;
+            let mut best_ty: Option<Type> = None;
+
+            for (span, ty) in &state.node_types {
+                // Line is 1-indexed in our Span, but 0-indexed in LSP Position
+                let line = position.line as usize + 1;
+                let col = position.character as usize + 1;
+
+                if span.line == line {
+                    // For now, we only have start position in Span.
+                    // This is a simplification. Ideally we'd have start and end.
+                    // But we can check if it's the exact line and near the column.
+                    if span.column <= col {
+                        if let Some(prev_span) = best_span {
+                            if span.column > prev_span.column {
+                                best_span = Some(*span);
+                                best_ty = Some(ty.clone());
+                            }
+                        } else {
+                            best_span = Some(*span);
+                            best_ty = Some(ty.clone());
+                        }
+                    }
+                }
+            }
+
+            if let Some(ty) = best_ty {
+                return Ok(Some(Hover {
+                    contents: HoverContents::Scalar(MarkedString::String(format!(
+                        "type: {:?}",
+                        ty
+                    ))),
+                    range: None,
+                }));
+            }
+        }
+
         Ok(None)
     }
 
@@ -71,7 +124,10 @@ impl LanguageServer for Backend {
 
 impl Backend {
     pub fn new(client: Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            documents: Mutex::new(HashMap::new()),
+        }
     }
 
     async fn on_change(&self, params: TextDocumentItem) {
@@ -81,7 +137,10 @@ impl Backend {
         let tokens = lexer.lex_all();
 
         let mut parser = Parser::new(tokens);
-        let _program = parser.parse_program();
+        let program = parser.parse_program();
+
+        let mut analyzer = SemanticAnalyzer::new();
+        analyzer.analyze(program.clone());
 
         let mut diagnostics = Vec::new();
 
@@ -92,7 +151,11 @@ impl Backend {
                     start: Position::new(diag.line as u32 - 1, diag.column as u32 - 1),
                     end: Position::new(diag.line as u32 - 1, diag.column as u32),
                 },
-                severity: Some(DiagnosticSeverity::ERROR),
+                severity: Some(match diag.severity {
+                    Severity::Error => DiagnosticSeverity::ERROR,
+                    Severity::Warning => DiagnosticSeverity::WARNING,
+                    Severity::Info => DiagnosticSeverity::INFORMATION,
+                }),
                 message: diag.message.clone(),
                 ..Default::default()
             });
@@ -105,15 +168,45 @@ impl Backend {
                     start: Position::new(diag.line as u32 - 1, diag.column as u32 - 1),
                     end: Position::new(diag.line as u32 - 1, diag.column as u32),
                 },
-                severity: Some(DiagnosticSeverity::ERROR),
+                severity: Some(match diag.severity {
+                    Severity::Error => DiagnosticSeverity::ERROR,
+                    Severity::Warning => DiagnosticSeverity::WARNING,
+                    Severity::Info => DiagnosticSeverity::INFORMATION,
+                }),
                 message: diag.message.clone(),
                 ..Default::default()
             });
         }
 
-        // Semantic Analysis (Placeholder, actual implementation might need more context)
-        // let mut analyzer = SemanticAnalyzer::new();
-        // if let Err(e) = analyzer.analyze(program) { ... }
+        // Collect Semantic errors
+        for diag in &analyzer.diagnostics.diagnostics {
+            diagnostics.push(Diagnostic {
+                range: Range {
+                    start: Position::new(diag.line as u32 - 1, diag.column as u32 - 1),
+                    end: Position::new(diag.line as u32 - 1, diag.column as u32),
+                },
+                severity: Some(match diag.severity {
+                    Severity::Error => DiagnosticSeverity::ERROR,
+                    Severity::Warning => DiagnosticSeverity::WARNING,
+                    Severity::Info => DiagnosticSeverity::INFORMATION,
+                }),
+                message: diag.message.clone(),
+                ..Default::default()
+            });
+        }
+
+        // Update document state
+        {
+            let mut docs = self.documents.lock().unwrap();
+            docs.insert(
+                params.uri.clone(),
+                DocumentState {
+                    source: params.text,
+                    program: Some(program),
+                    node_types: analyzer.node_types,
+                },
+            );
+        }
 
         self.client
             .publish_diagnostics(params.uri, diagnostics, Some(params.version))

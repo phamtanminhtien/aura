@@ -34,6 +34,7 @@ pub struct SemanticAnalyzer {
     pub classes: HashMap<String, ClassInfo>,
     pub current_class: Option<String>,
     pub diagnostics: DiagnosticList,
+    pub node_types: HashMap<Span, Type>,
 }
 
 impl SemanticAnalyzer {
@@ -43,6 +44,7 @@ impl SemanticAnalyzer {
             classes: HashMap::new(),
             current_class: None,
             diagnostics: DiagnosticList::new(),
+            node_types: HashMap::new(),
         }
     }
 
@@ -369,7 +371,8 @@ impl SemanticAnalyzer {
     }
 
     fn check_expr(&mut self, expr: Expr) -> Type {
-        match expr {
+        let span = expr.span();
+        let ty = match expr {
             Expr::Number(_, _) => Type::Int32,
             Expr::StringLiteral(_, _) => Type::String,
             Expr::Variable(name, span) => {
@@ -446,9 +449,10 @@ impl SemanticAnalyzer {
                             );
                         }
                     }
-                    return (*ret_ty).clone();
+                    *ret_ty
+                } else {
+                    Type::Int32 // Default for now
                 }
-                Type::Int64 // Fallback
             }
             Expr::New(class_name, args, span) => {
                 if !self.classes.contains_key(&class_name) {
@@ -567,7 +571,9 @@ impl SemanticAnalyzer {
                 Type::Boolean
             }
             Expr::Error(_) => Type::Unknown,
-        }
+        };
+        self.node_types.insert(span, ty.clone());
+        ty
     }
 
     fn push_scope(&mut self) {
