@@ -125,6 +125,14 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 Token::new(TokenKind::CloseBrace, current_line, current_column)
             }
+            '[' => {
+                self.advance();
+                Token::new(TokenKind::OpenBracket, current_line, current_column)
+            }
+            ']' => {
+                self.advance();
+                Token::new(TokenKind::CloseBracket, current_line, current_column)
+            }
             '/' => {
                 self.advance();
                 if self.peek() == '/' {

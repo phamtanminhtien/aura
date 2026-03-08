@@ -20,6 +20,8 @@ pub enum Value {
     Void,
     Null,
     Class(String),
+    Array(Vec<Value>),
+    Promise(Box<Value>),
 }
 
 impl Value {

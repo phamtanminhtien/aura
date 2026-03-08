@@ -60,10 +60,15 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self {
+        let mut interp = Self {
             env: Box::new(Environment::new(None)),
             classes: HashMap::new(),
-        }
+        };
+        // Register built-in Promise class (methods are handled as special cases in eval_expr)
+        interp
+            .classes
+            .insert("Promise".to_string(), (Vec::new(), HashMap::new()));
+        interp
     }
 
     pub fn interpret(&mut self, program: Program) {
@@ -190,6 +195,27 @@ impl Interpreter {
                     Value::Instance(c, _) => println!("<Instance of {}>", c),
                     Value::Function { name, .. } => println!("<Function {}>", name),
                     Value::Class(name) => println!("<Class {}>", name),
+                    Value::Array(elements) => {
+                        print!("[");
+                        for (i, el) in elements.iter().enumerate() {
+                            match el {
+                                Value::Int(n) => print!("{}", n),
+                                Value::String(s) => print!("\"{}\"", s),
+                                Value::Boolean(b) => print!("{}", b),
+                                Value::Null => print!("null"),
+                                Value::Array(_) => print!("[...]"),
+                                Value::Promise(_) => print!("<Promise>"),
+                                _ => print!("{:?}", el),
+                            }
+                            if i < elements.len() - 1 {
+                                print!(", ");
+                            }
+                        }
+                        println!("]");
+                    }
+                    Value::Promise(val) => {
+                        println!("<Promise: resolved to {:?}>", val);
+                    }
                 }
                 StatementResult::None
             }
@@ -248,6 +274,13 @@ impl Interpreter {
     fn eval_expr(&mut self, expr: Expr) -> Value {
         match expr {
             Expr::Number(n, _) => Value::Int(n),
+            Expr::ArrayLiteral(elements, _) => {
+                let mut vals = Vec::new();
+                for e in elements {
+                    vals.push(self.eval_expr(e));
+                }
+                Value::Array(vals)
+            }
             Expr::StringLiteral(s, _) => Value::String(s),
             Expr::Template(parts, _) => {
                 use crate::compiler::ast::TemplatePart;
@@ -306,7 +339,7 @@ impl Interpreter {
                         "!=" => Value::Boolean(l != r),
                         _ => panic!("Unsupported operator {} for strings", op),
                     },
-                    _ => panic!("Operands must be same type (integers or strings) for binary op, got {:?} and {:?}", left, right),
+                    (l, r) => panic!("Operands must be same type (integers or strings) for binary op, got {:?} and {:?}", l, r),
                 }
             }
             Expr::Assign(name, val_expr, _) => {
@@ -382,6 +415,79 @@ impl Interpreter {
                         }
                     }
                     Value::Class(class_name) => {
+                        if class_name == "Promise" {
+                            let mut arg_vals = Vec::new();
+                            for a in &args {
+                                arg_vals.push(self.eval_expr(a.clone()));
+                            }
+
+                            match method.as_str() {
+                                "all" => {
+                                    if let Some(Value::Array(promises)) = arg_vals.get(0) {
+                                        let mut resolved = Vec::new();
+                                        for p in promises {
+                                            if let Value::Promise(v) = p {
+                                                resolved.push((**v).clone());
+                                            } else {
+                                                resolved.push(p.clone());
+                                            }
+                                        }
+                                        return Value::Promise(Box::new(Value::Array(resolved)));
+                                    }
+                                    panic!("Promise.all expects an array");
+                                }
+                                "allSettled" => {
+                                    if let Some(Value::Array(promises)) = arg_vals.get(0) {
+                                        let mut results = Vec::new();
+                                        for p in promises {
+                                            let mut map = HashMap::new();
+                                            map.insert(
+                                                "status".to_string(),
+                                                Value::String("fulfilled".to_string()),
+                                            );
+                                            if let Value::Promise(v) = p {
+                                                map.insert("value".to_string(), (**v).clone());
+                                            } else {
+                                                map.insert("value".to_string(), p.clone());
+                                            }
+                                            results.push(Value::Instance(
+                                                "PromiseResult".to_string(),
+                                                Rc::new(RefCell::new(map)),
+                                            ));
+                                        }
+                                        return Value::Promise(Box::new(Value::Array(results)));
+                                    }
+                                    panic!("Promise.allSettled expects an array");
+                                }
+                                "any" => {
+                                    if let Some(Value::Array(promises)) = arg_vals.get(0) {
+                                        for p in promises {
+                                            // In our synchronous interpreter, we just pick the first one
+                                            if let Value::Promise(v) = p {
+                                                return Value::Promise(v.clone());
+                                            }
+                                            return Value::Promise(Box::new(p.clone()));
+                                        }
+                                        panic!("Promise.any with empty array");
+                                    }
+                                    panic!("Promise.any expects an array");
+                                }
+                                "race" => {
+                                    if let Some(Value::Array(promises)) = arg_vals.get(0) {
+                                        if let Some(p) = promises.get(0) {
+                                            if let Value::Promise(v) = p {
+                                                return Value::Promise(v.clone());
+                                            }
+                                            return Value::Promise(Box::new(p.clone()));
+                                        }
+                                        panic!("Promise.race with empty array");
+                                    }
+                                    panic!("Promise.race expects an array");
+                                }
+                                _ => {}
+                            }
+                        }
+
                         let m = {
                             let (_, methods) = self
                                 .classes
@@ -397,8 +503,8 @@ impl Interpreter {
                         };
 
                         let mut arg_vals = Vec::new();
-                        for a in args {
-                            arg_vals.push(self.eval_expr(a));
+                        for a in &args {
+                            arg_vals.push(self.eval_expr(a.clone()));
                         }
 
                         self.push_scope();

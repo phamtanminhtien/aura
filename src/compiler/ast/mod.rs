@@ -52,6 +52,7 @@ pub enum Expr {
     /// Parts are alternating Str / Expr segments.
     Template(Vec<TemplatePart>, Span),
     Await(Box<Expr>, Span),
+    ArrayLiteral(Vec<Expr>, Span),
     Error(Span),
 }
 
@@ -80,6 +81,7 @@ impl Expr {
             Expr::TypeTest(_, _, s) => *s,
             Expr::Template(_, s) => *s,
             Expr::Await(_, s) => *s,
+            Expr::ArrayLiteral(_, s) => *s,
             Expr::Error(s) => *s,
         }
     }

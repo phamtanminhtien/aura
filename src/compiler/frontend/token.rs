@@ -47,13 +47,15 @@ pub enum TokenKind {
     Percent,      // %
 
     // Punctuation
-    Colon,      // :
-    Semicolon,  // ;
-    Comma,      // ,
-    OpenParen,  // (
-    CloseParen, // )
-    OpenBrace,  // {
-    CloseBrace, // }
+    Colon,        // :
+    Semicolon,    // ;
+    Comma,        // ,
+    OpenParen,    // (
+    CloseParen,   // )
+    OpenBrace,    // {
+    CloseBrace,   // }
+    OpenBracket,  // [
+    CloseBracket, // ]
 
     // End of file
     EOF,

@@ -489,6 +489,7 @@ impl Codegen {
                 // For now, evaluate the expression and hope it's a value
                 self.generate_expr(*expr);
             }
+            Expr::ArrayLiteral(_, _) => todo!("Implement codegen for array literals"),
             Expr::Error(_) => panic!("Compiler bug: reaching error node in codegen"),
         }
     }

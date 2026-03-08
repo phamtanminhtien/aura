@@ -45,7 +45,7 @@ pub struct SemanticAnalyzer {
 
 impl SemanticAnalyzer {
     pub fn new() -> Self {
-        Self {
+        let mut analyzer = Self {
             scope: Box::new(Scope::new(None)),
             classes: HashMap::new(),
             current_class: None,
@@ -53,7 +53,65 @@ impl SemanticAnalyzer {
             node_types: HashMap::new(),
             node_definitions: HashMap::new(),
             node_docs: HashMap::new(),
-        }
+        };
+
+        // Register built-in Promise class
+        let mut static_methods = HashMap::new();
+        // Promise.all<T>(values: Array<Promise<T>>): Promise<Array<T>>
+        // For simplicity, we use Unknown for now as we don't have generics in methods yet
+        static_methods.insert(
+            "all".to_string(),
+            (
+                vec![Type::Array(Box::new(Type::Unknown))],
+                Type::Generic(
+                    "Promise".to_string(),
+                    vec![Type::Array(Box::new(Type::Unknown))],
+                ),
+                Some("Waits for all promises to be resolved".to_string()),
+            ),
+        );
+        static_methods.insert(
+            "allSettled".to_string(),
+            (
+                vec![Type::Array(Box::new(Type::Unknown))],
+                Type::Generic(
+                    "Promise".to_string(),
+                    vec![Type::Array(Box::new(Type::Unknown))],
+                ),
+                Some("Waits for all promises to be settled".to_string()),
+            ),
+        );
+        static_methods.insert(
+            "any".to_string(),
+            (
+                vec![Type::Array(Box::new(Type::Unknown))],
+                Type::Generic("Promise".to_string(), vec![Type::Unknown]),
+                Some("Waits for any promise to be resolved".to_string()),
+            ),
+        );
+        static_methods.insert(
+            "race".to_string(),
+            (
+                vec![Type::Array(Box::new(Type::Unknown))],
+                Type::Generic("Promise".to_string(), vec![Type::Unknown]),
+                Some("Waits for the first promise to be settled".to_string()),
+            ),
+        );
+
+        analyzer.classes.insert(
+            "Promise".to_string(),
+            ClassInfo {
+                name: "Promise".to_string(),
+                fields: HashMap::new(),
+                static_fields: HashMap::new(),
+                methods: HashMap::new(),
+                static_methods,
+                span: Span::new(0, 0),
+                doc: Some("Built-in Promise class".to_string()),
+            },
+        );
+
+        analyzer
     }
 
     fn error(&mut self, kind: SemanticErrorKind, span: Span) {
@@ -215,6 +273,8 @@ impl SemanticAnalyzer {
         history.push(pair);
 
         let result = match (src, target) {
+            (Type::Unknown, _) | (_, Type::Unknown) => true,
+
             (s, Type::Union(options)) => options
                 .iter()
                 .any(|opt| self.is_assignable_internal(s, opt, history)),
@@ -223,6 +283,9 @@ impl SemanticAnalyzer {
                 .all(|opt| self.is_assignable_internal(opt, t, history)),
 
             (Type::Int32, Type::Int64) => true,
+
+            // Array types
+            (Type::Array(s), Type::Array(t)) => self.is_assignable_internal(s, t, history),
 
             // Generic types (Nominal for now, e.g. Box<i32> vs Box<i32>)
             (Type::Generic(src_name, src_args), Type::Generic(tgt_name, tgt_args)) => {
@@ -463,6 +526,23 @@ impl SemanticAnalyzer {
                     }
                     _ => ty, // Fallback
                 }
+            }
+            Expr::ArrayLiteral(elements, _) => {
+                let mut element_tys = Vec::new();
+                for el in elements {
+                    element_tys.push(self.check_expr(el));
+                }
+                let base_ty = if element_tys.is_empty() {
+                    Type::Unknown
+                } else {
+                    let first = element_tys[0].clone();
+                    if element_tys.iter().all(|t| *t == first) {
+                        first
+                    } else {
+                        Type::Union(element_tys)
+                    }
+                };
+                Type::Array(Box::new(base_ty))
             }
             Expr::Error(_s) => Type::Unknown,
             Expr::Variable(name, span) => {

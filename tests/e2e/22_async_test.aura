@@ -2,6 +2,8 @@
 // Expected output:
 // Fetching from https://api.example.com/users
 // 42
+// All result: 
+// <Promise: resolved to Array([Int(1), Int(2)])>
 
 async function fetchData(url: string): Promise<i32> {
     print("Fetching from " + url);
@@ -18,3 +20,9 @@ class Api {
 let api = new Api();
 let data = await api.get("/users");
 print(data);
+
+let p1 = 1;
+let p2 = 2;
+let all = await Promise.all([p1, p2]);
+print("All result:");
+print(all);

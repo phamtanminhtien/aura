@@ -480,12 +480,9 @@ impl Lowerer {
             Expr::Template(_, _) => {
                 todo!("Template lowering")
             }
-            Expr::Await(expr, _) => {
-                let val = self.lower_expr(*expr);
-                // For now, lower await as a no-op or a special intrinsic call
-                val
-            }
-            Expr::Error(_) => unreachable!(),
+            Expr::Await(_, _) => todo!("Await in IR lower"),
+            Expr::ArrayLiteral(_, _) => todo!("Array literals in IR lower"),
+            Expr::Error(_) => panic!("Compiler bug: error node in IR lower"),
             Expr::StringLiteral(s, _) => {
                 let name = format!("str_{}", self.globals.len());
                 self.globals.push((name.clone(), s));

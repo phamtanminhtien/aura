@@ -839,6 +839,7 @@ impl Parser {
                 let expr = self.parse_unary();
                 Expr::Await(Box::new(expr), s)
             }
+            TokenKind::OpenBracket => self.parse_array_literal(),
             _ => {
                 if !self.panic_mode {
                     let token = self.peek();
@@ -853,6 +854,20 @@ impl Parser {
             }
         };
         self.parse_postfix(node)
+    }
+
+    fn parse_array_literal(&mut self) -> Expr {
+        let s = self.span();
+        let _ = self.consume(TokenKind::OpenBracket);
+        let mut elements = Vec::new();
+        while self.peek().kind != TokenKind::CloseBracket && !self.is_at_end() {
+            elements.push(self.parse_expression());
+            if self.peek().kind == TokenKind::Comma {
+                self.advance();
+            }
+        }
+        let _ = self.consume(TokenKind::CloseBracket);
+        Expr::ArrayLiteral(elements, s)
     }
 
     fn parse_postfix(&mut self, mut node: Expr) -> Expr {
