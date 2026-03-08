@@ -66,9 +66,10 @@ fn main() {
 
     // Semantic Analysis
     let mut analyzer = SemanticAnalyzer::new();
-    if let Err(e) = analyzer.analyze(program.clone()) {
-        eprintln!("Semantic Error: {:?}", e);
-        return;
+    analyzer.analyze(program.clone());
+    if analyzer.diagnostics.has_errors() {
+        analyzer.diagnostics.report();
+        std::process::exit(1);
     }
 
     if use_interp {

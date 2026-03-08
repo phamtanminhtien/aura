@@ -1,4 +1,4 @@
-use crate::compiler::ast::{ClassMethod, Expr, Field, Program, Statement, TypeExpr};
+use crate::compiler::ast::{ClassMethod, Expr, Field, Program, Span, Statement, TypeExpr};
 use crate::compiler::frontend::error::{Diagnostic, DiagnosticList};
 use crate::compiler::frontend::token::{Token, TokenKind};
 
@@ -19,6 +19,11 @@ impl Parser {
         }
     }
 
+    fn span(&self) -> Span {
+        let token = self.peek();
+        Span::new(token.line, token.column)
+    }
+
     pub fn parse_program(&mut self) -> Program {
         let mut statements = Vec::new();
         while !self.is_at_end() {
@@ -36,6 +41,7 @@ impl Parser {
     }
 
     fn parse_statement(&mut self) -> Result<Statement, ()> {
+        let s = self.span();
         match self.peek().kind {
             TokenKind::Let => self.parse_let_statement(),
             TokenKind::Print => self.parse_print_statement(),
@@ -48,12 +54,13 @@ impl Parser {
             _ => {
                 let expr = self.parse_expression();
                 self.consume(TokenKind::Semicolon)?;
-                Ok(Statement::Expression(expr))
+                Ok(Statement::Expression(expr, s))
             }
         }
     }
 
     fn parse_block(&mut self) -> Statement {
+        let s = self.span();
         let _ = self.consume(TokenKind::OpenBrace);
         let mut statements = Vec::new();
         while self.peek().kind != TokenKind::CloseBrace && !self.is_at_end() {
@@ -66,17 +73,19 @@ impl Parser {
             }
         }
         let _ = self.consume(TokenKind::CloseBrace);
-        Statement::Block(statements)
+        Statement::Block(statements, s)
     }
 
     fn parse_return_statement(&mut self) -> Result<Statement, ()> {
+        let s = self.span();
         self.consume(TokenKind::Return)?;
         let expr = self.parse_expression();
         self.consume(TokenKind::Semicolon)?;
-        Ok(Statement::Return(expr))
+        Ok(Statement::Return(expr, s))
     }
 
     fn parse_type_expr(&mut self) -> TypeExpr {
+        let s = self.span();
         let mut types = Vec::new();
         types.push(self.parse_primary_type());
 
@@ -88,11 +97,12 @@ impl Parser {
         if types.len() == 1 {
             types.pop().unwrap()
         } else {
-            TypeExpr::Union(types)
+            TypeExpr::Union(types, s)
         }
     }
 
     fn parse_primary_type(&mut self) -> TypeExpr {
+        let s = self.span();
         let kind = self.peek().kind.clone();
         match kind {
             TokenKind::Identifier(name) => {
@@ -107,16 +117,17 @@ impl Parser {
                         }
                     }
                     let _ = self.consume(TokenKind::Greater);
-                    TypeExpr::Generic(name, args)
+                    TypeExpr::Generic(name, args, s)
                 } else {
-                    TypeExpr::Name(name)
+                    TypeExpr::Name(name, s)
                 }
             }
-            _ => TypeExpr::Name("unknown".to_string()),
+            _ => TypeExpr::Name("unknown".to_string(), s),
         }
     }
 
     fn parse_function_declaration(&mut self) -> Result<Statement, ()> {
+        let s = self.span();
         self.consume(TokenKind::Function)?;
         let name = if let TokenKind::Identifier(name) = self.peek().kind.clone() {
             self.advance();
@@ -152,7 +163,7 @@ impl Parser {
             self.advance();
             self.parse_type_expr()
         } else {
-            TypeExpr::Name("void".to_string())
+            TypeExpr::Name("void".to_string(), s)
         };
 
         let body = Box::new(self.parse_block());
@@ -162,10 +173,12 @@ impl Parser {
             params,
             return_ty,
             body,
+            span: s,
         })
     }
 
     fn parse_let_statement(&mut self) -> Result<Statement, ()> {
+        let s = self.span();
         self.consume(TokenKind::Let)?;
         let name = if let TokenKind::Identifier(name) = self.peek().kind.clone() {
             self.advance();
@@ -191,20 +204,27 @@ impl Parser {
         let value = self.parse_expression();
         self.consume(TokenKind::Semicolon)?;
 
-        Ok(Statement::VarDeclaration { name, ty, value })
+        Ok(Statement::VarDeclaration {
+            name,
+            ty,
+            value,
+            span: s,
+        })
     }
 
     fn parse_print_statement(&mut self) -> Result<Statement, ()> {
+        let s = self.span();
         self.consume(TokenKind::Print)?;
         self.consume(TokenKind::OpenParen)?;
         let expr = self.parse_expression();
         self.consume(TokenKind::CloseParen)?;
         self.consume(TokenKind::Semicolon)?;
 
-        Ok(Statement::Print(expr))
+        Ok(Statement::Print(expr, s))
     }
 
     fn parse_if_statement(&mut self) -> Result<Statement, ()> {
+        let s = self.span();
         self.consume(TokenKind::If)?;
         let _ = self.consume(TokenKind::OpenParen);
         let condition = self.parse_expression();
@@ -234,10 +254,12 @@ impl Parser {
             condition,
             then_branch,
             else_branch,
+            span: s,
         })
     }
 
     fn parse_while_statement(&mut self) -> Result<Statement, ()> {
+        let s = self.span();
         self.consume(TokenKind::While)?;
         let _ = self.consume(TokenKind::OpenParen);
         let condition = self.parse_expression();
@@ -251,10 +273,15 @@ impl Parser {
             }
         });
 
-        Ok(Statement::While { condition, body })
+        Ok(Statement::While {
+            condition,
+            body,
+            span: s,
+        })
     }
 
     fn parse_class_declaration(&mut self) -> Result<Statement, ()> {
+        let s = self.span();
         self.consume(TokenKind::Class)?;
         let name = if let TokenKind::Identifier(name) = self.peek().kind.clone() {
             self.advance();
@@ -278,6 +305,7 @@ impl Parser {
         let mut constructor = None;
 
         while self.peek().kind != TokenKind::CloseBrace && !self.is_at_end() {
+            let ms = self.span();
             let kind = self.peek().kind.clone();
             match kind {
                 TokenKind::Constructor => {
@@ -302,8 +330,9 @@ impl Parser {
                     constructor = Some(ClassMethod {
                         name: "constructor".to_string(),
                         params,
-                        return_ty: TypeExpr::Name(name.clone()),
+                        return_ty: TypeExpr::Name(name.clone(), ms),
                         body,
+                        span: ms,
                     });
                 }
                 TokenKind::Function => {
@@ -351,7 +380,7 @@ impl Parser {
                         self.advance();
                         self.parse_type_expr()
                     } else {
-                        TypeExpr::Name("void".to_string())
+                        TypeExpr::Name("void".to_string(), ms)
                     };
 
                     let body = Box::new(self.parse_block());
@@ -360,9 +389,11 @@ impl Parser {
                         params,
                         return_ty,
                         body,
+                        span: ms,
                     });
                 }
                 TokenKind::Identifier(fname) => {
+                    let fs = self.span();
                     self.advance();
                     let _ = self.consume(TokenKind::Colon);
                     let fty = self.parse_type_expr();
@@ -370,6 +401,7 @@ impl Parser {
                     fields.push(Field {
                         name: fname,
                         ty: fty,
+                        span: fs,
                     });
                 }
                 _ => {
@@ -393,19 +425,21 @@ impl Parser {
             fields,
             methods,
             constructor,
+            span: s,
         })
     }
 
     fn parse_expression(&mut self) -> Expr {
+        let s = self.span();
         let node = self.parse_comparison();
 
         if self.peek().kind == TokenKind::Equal {
             self.advance();
             let value = self.parse_expression();
-            if let Expr::Variable(name) = node {
-                return Expr::Assign(name, Box::new(value));
-            } else if let Expr::MemberAccess(obj, member) = node {
-                return Expr::MemberAssign(obj, member, Box::new(value));
+            if let Expr::Variable(name, vs) = node {
+                return Expr::Assign(name, Box::new(value), vs);
+            } else if let Expr::MemberAccess(obj, member, ms) = node {
+                return Expr::MemberAssign(obj, member, Box::new(value), ms);
             } else {
                 let token = self.peek();
                 self.diagnostics.push(Diagnostic::error(
@@ -413,7 +447,7 @@ impl Parser {
                     token.line,
                     token.column,
                 ));
-                return Expr::Error;
+                return Expr::Error(s);
             }
         }
 
@@ -421,6 +455,7 @@ impl Parser {
     }
 
     fn parse_comparison(&mut self) -> Expr {
+        let s = self.span();
         let mut node = self.parse_type_test();
 
         while let TokenKind::Less
@@ -442,23 +477,25 @@ impl Parser {
             .to_string();
             self.advance();
             let right = self.parse_arithmetic();
-            node = Expr::BinaryOp(Box::new(node), op, Box::new(right));
+            node = Expr::BinaryOp(Box::new(node), op, Box::new(right), s);
         }
 
         node
     }
 
     fn parse_type_test(&mut self) -> Expr {
+        let s = self.span();
         let mut node = self.parse_arithmetic();
         while self.peek().kind == TokenKind::Is {
             self.advance();
             let ty = self.parse_type_expr();
-            node = Expr::TypeTest(Box::new(node), ty);
+            node = Expr::TypeTest(Box::new(node), ty, s);
         }
         node
     }
 
     fn parse_arithmetic(&mut self) -> Expr {
+        let s = self.span();
         let mut node = self.parse_multiplicative();
 
         while let TokenKind::Plus | TokenKind::Minus = self.peek().kind {
@@ -470,13 +507,14 @@ impl Parser {
             .to_string();
             self.advance();
             let right = self.parse_multiplicative();
-            node = Expr::BinaryOp(Box::new(node), op, Box::new(right));
+            node = Expr::BinaryOp(Box::new(node), op, Box::new(right), s);
         }
 
         node
     }
 
     fn parse_multiplicative(&mut self) -> Expr {
+        let s = self.span();
         let mut node = self.parse_primary();
 
         while let TokenKind::Star | TokenKind::Slash | TokenKind::Percent = self.peek().kind {
@@ -489,29 +527,30 @@ impl Parser {
             .to_string();
             self.advance();
             let right = self.parse_primary();
-            node = Expr::BinaryOp(Box::new(node), op, Box::new(right));
+            node = Expr::BinaryOp(Box::new(node), op, Box::new(right), s);
         }
 
         node
     }
 
     fn parse_primary(&mut self) -> Expr {
+        let s = self.span();
         let node = match self.peek().kind.clone() {
             TokenKind::Number(val) => {
                 self.advance();
-                Expr::Number(val)
+                Expr::Number(val, s)
             }
-            TokenKind::StringLiteral(s) => {
+            TokenKind::StringLiteral(ls) => {
                 self.advance();
-                Expr::StringLiteral(s)
+                Expr::StringLiteral(ls, s)
             }
             TokenKind::Identifier(name) => {
                 self.advance();
-                Expr::Variable(name)
+                Expr::Variable(name, s)
             }
             TokenKind::This => {
                 self.advance();
-                Expr::This
+                Expr::This(s)
             }
             TokenKind::New => {
                 self.advance();
@@ -540,7 +579,7 @@ impl Parser {
                     }
                 }
                 let _ = self.consume(TokenKind::CloseParen);
-                Expr::New(name, args)
+                Expr::New(name, args, s)
             }
             TokenKind::OpenParen => {
                 self.advance();
@@ -558,7 +597,7 @@ impl Parser {
                     ));
                     self.panic_mode = true;
                 }
-                Expr::Error
+                Expr::Error(s)
             }
         };
         self.parse_postfix(node)
@@ -566,6 +605,7 @@ impl Parser {
 
     fn parse_postfix(&mut self, mut node: Expr) -> Expr {
         loop {
+            let s = self.span();
             match self.peek().kind {
                 TokenKind::Dot => {
                     self.advance();
@@ -585,9 +625,9 @@ impl Parser {
                         None
                     };
                     if let Some(m) = member {
-                        node = Expr::MemberAccess(Box::new(node), m);
+                        node = Expr::MemberAccess(Box::new(node), m, s);
                     } else {
-                        node = Expr::Error;
+                        node = Expr::Error(s);
                     }
                 }
                 TokenKind::OpenParen => {
@@ -601,10 +641,10 @@ impl Parser {
                     }
                     let _ = self.consume(TokenKind::CloseParen);
 
-                    if let Expr::Variable(name) = node {
-                        node = Expr::Call(name, args);
-                    } else if let Expr::MemberAccess(obj, member) = node {
-                        node = Expr::MethodCall(obj, member, args);
+                    if let Expr::Variable(name, _) = node.clone() {
+                        node = Expr::Call(name, args, s);
+                    } else if let Expr::MemberAccess(obj, member, _) = node.clone() {
+                        node = Expr::MethodCall(obj, member, args, s);
                     } else {
                         if !self.panic_mode {
                             let token = self.peek();
@@ -615,7 +655,7 @@ impl Parser {
                             ));
                             self.panic_mode = true;
                         }
-                        node = Expr::Error;
+                        node = Expr::Error(s);
                     }
                 }
                 _ => break,

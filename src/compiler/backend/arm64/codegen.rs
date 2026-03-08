@@ -62,7 +62,12 @@ impl Codegen {
 
     fn generate_statement(&mut self, stmt: Statement) {
         match stmt {
-            Statement::VarDeclaration { name, ty: _, value } => {
+            Statement::VarDeclaration {
+                name,
+                ty: _,
+                value,
+                span: _,
+            } => {
                 self.generate_expr(value);
                 if !self.variables.contains_key(&name) {
                     self.stack_offset += 16;
@@ -78,6 +83,7 @@ impl Codegen {
                 params,
                 return_ty: _,
                 body,
+                span: _,
             } => {
                 let saved_vars = self.variables.clone();
                 let saved_offset = self.stack_offset;
@@ -123,20 +129,20 @@ impl Codegen {
                 self.stack_offset = saved_offset;
                 self.current_fn_end = old_fn_end;
             }
-            Statement::Return(expr) => {
+            Statement::Return(expr, _) => {
                 self.generate_expr(expr);
                 if let Some(ref end) = self.current_fn_end {
                     self.emitter.output.push_str(&format!("    b {}\n", end));
                 }
             }
-            Statement::Print(expr) => {
+            Statement::Print(expr, _) => {
                 self.generate_expr(expr);
                 self.emitter.call("_print_num");
             }
-            Statement::Expression(expr) => {
+            Statement::Expression(expr, _) => {
                 self.generate_expr(expr);
             }
-            Statement::Block(stmts) => {
+            Statement::Block(stmts, _) => {
                 for s in stmts {
                     self.generate_statement(s);
                 }
@@ -145,6 +151,7 @@ impl Codegen {
                 condition,
                 then_branch,
                 else_branch,
+                span: _,
             } => {
                 let else_label = self.new_label("else");
                 let end_label = self.new_label("end");
@@ -162,7 +169,11 @@ impl Codegen {
                 }
                 self.emitter.output.push_str(&format!("{}:\n", end_label));
             }
-            Statement::While { condition, body } => {
+            Statement::While {
+                condition,
+                body,
+                span: _,
+            } => {
                 let start_label = self.new_label("while_start");
                 let end_label = self.new_label("while_end");
                 self.emitter.output.push_str(&format!("{}:\n", start_label));
@@ -181,6 +192,7 @@ impl Codegen {
                 fields,
                 methods,
                 constructor,
+                span: _,
             } => {
                 let field_names: Vec<String> = fields.iter().map(|f| f.name.clone()).collect();
                 let method_names: Vec<String> = methods.iter().map(|m| m.name.clone()).collect();
@@ -195,6 +207,7 @@ impl Codegen {
                         params: cons.params,
                         return_ty: cons.return_ty,
                         body: cons.body.clone(),
+                        span: cons.span,
                     });
                 }
 
@@ -204,6 +217,7 @@ impl Codegen {
                         params: method.params,
                         return_ty: method.return_ty,
                         body: method.body.clone(),
+                        span: method.span,
                     });
                 }
                 self.current_class = old_class;
@@ -214,13 +228,13 @@ impl Codegen {
 
     fn generate_expr(&mut self, expr: Expr) {
         match expr {
-            Expr::Number(val) => {
+            Expr::Number(val, _) => {
                 self.emitter.mov_imm(Register::X0, val);
             }
-            Expr::StringLiteral(_) => {
+            Expr::StringLiteral(_, _) => {
                 self.emitter.mov_imm(Register::X0, 0); // TODO: String support
             }
-            Expr::Variable(name) => {
+            Expr::Variable(name, _) => {
                 let offset = self
                     .variables
                     .get(&name)
@@ -229,7 +243,7 @@ impl Codegen {
                     .output
                     .push_str(&format!("    ldr x0, [x29, -{}]\n", offset));
             }
-            Expr::BinaryOp(left, op, right) => {
+            Expr::BinaryOp(left, op, right, _) => {
                 self.generate_expr(*left);
                 self.emitter.push(Register::X0);
                 self.generate_expr(*right);
@@ -271,14 +285,14 @@ impl Codegen {
                     _ => panic!("Unsupported operator {}", op),
                 }
             }
-            Expr::Assign(name, value) => {
+            Expr::Assign(name, value, _) => {
                 self.generate_expr(*value);
                 let offset = self.variables.get(&name).expect("Undefined variable");
                 self.emitter
                     .output
                     .push_str(&format!("    str x0, [x29, -{}]\n", offset));
             }
-            Expr::This => {
+            Expr::This(_) => {
                 let offset = self
                     .variables
                     .get("this")
@@ -287,7 +301,7 @@ impl Codegen {
                     .output
                     .push_str(&format!("    ldr x0, [x29, -{}]\n", offset));
             }
-            Expr::New(class_name, args) => {
+            Expr::New(class_name, args, _) => {
                 let (fields, _) = self
                     .classes
                     .get(&class_name)
@@ -319,7 +333,7 @@ impl Codegen {
 
                 self.emitter.output.push_str("    ldr x0, [sp], 16\n");
             }
-            Expr::MemberAccess(obj, member) => {
+            Expr::MemberAccess(obj, member, _) => {
                 self.generate_expr(*obj);
                 let mut offset = 0;
                 if let Some(ref class_name) = self.current_class {
@@ -332,7 +346,7 @@ impl Codegen {
                     .output
                     .push_str(&format!("    ldr x0, [x0, #{}]\n", offset));
             }
-            Expr::MemberAssign(obj, member, value) => {
+            Expr::MemberAssign(obj, member, value, _) => {
                 self.generate_expr(*value);
                 self.emitter.push(Register::X0);
                 self.generate_expr(*obj);
@@ -349,7 +363,7 @@ impl Codegen {
                     .push_str(&format!("    str x1, [x0, #{}]\n", offset));
                 self.emitter.mov_reg(Register::X0, Register::X1); // Assignment result
             }
-            Expr::MethodCall(obj, member, args) => {
+            Expr::MethodCall(obj, member, args, _) => {
                 self.generate_expr(*obj);
                 self.emitter.push(Register::X0);
 
@@ -375,7 +389,7 @@ impl Codegen {
 
                 self.emitter.call(&method_label);
             }
-            Expr::Call(name, args) => {
+            Expr::Call(name, args, _) => {
                 for arg in &args {
                     self.generate_expr(arg.clone());
                     self.emitter.push(Register::X0);
@@ -387,11 +401,11 @@ impl Codegen {
                 }
                 self.emitter.call(&format!("_{}", name));
             }
-            Expr::TypeTest(_, _) => {
+            Expr::TypeTest(_, _, _) => {
                 // TODO: Implement type test codegen in Phase 4/5
                 self.emitter.mov_imm(Register::X0, 0);
             }
-            Expr::Error => panic!("Compiler bug: reaching error node in codegen"),
+            Expr::Error(_) => panic!("Compiler bug: reaching error node in codegen"),
         }
     }
 }

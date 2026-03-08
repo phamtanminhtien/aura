@@ -1,4 +1,5 @@
-use crate::compiler::ast::{Expr, Program, Statement, TypeExpr};
+use crate::compiler::ast::{Expr, Program, Span, Statement, TypeExpr};
+use crate::compiler::frontend::error::{Diagnostic, DiagnosticList};
 use crate::compiler::sema::scope::Scope;
 use crate::compiler::sema::ty::Type;
 use std::collections::HashMap;
@@ -9,14 +10,8 @@ pub struct ClassInfo {
     pub methods: HashMap<String, (Vec<Type>, Type)>, // name -> (params, return_ty)
 }
 
-pub struct SemanticAnalyzer {
-    pub scope: Box<Scope>,
-    pub classes: HashMap<String, ClassInfo>,
-    pub current_class: Option<String>,
-}
-
-#[derive(Debug)]
-pub enum SemanticError {
+#[derive(Debug, Clone)]
+pub enum SemanticErrorKind {
     UndefinedVariable(String),
     UndefinedClass(String),
     UndefinedMethod(String, String),
@@ -28,16 +23,59 @@ pub enum SemanticError {
     NotAClass(String),
 }
 
+#[derive(Debug, Clone)]
+pub struct SemanticError {
+    pub kind: SemanticErrorKind,
+    pub span: Span,
+}
+
+pub struct SemanticAnalyzer {
+    pub scope: Box<Scope>,
+    pub classes: HashMap<String, ClassInfo>,
+    pub current_class: Option<String>,
+    pub diagnostics: DiagnosticList,
+}
+
 impl SemanticAnalyzer {
     pub fn new() -> Self {
         Self {
             scope: Box::new(Scope::new(None)),
             classes: HashMap::new(),
             current_class: None,
+            diagnostics: DiagnosticList::new(),
         }
     }
 
-    pub fn analyze(&mut self, program: Program) -> Result<(), SemanticError> {
+    fn error(&mut self, kind: SemanticErrorKind, span: Span) {
+        let msg = match &kind {
+            SemanticErrorKind::UndefinedVariable(n) => format!("Undefined variable: {}", n),
+            SemanticErrorKind::UndefinedClass(n) => format!("Undefined class: {}", n),
+            SemanticErrorKind::UndefinedMethod(c, m) => {
+                format!("Method {} not found in class {}", m, c)
+            }
+            SemanticErrorKind::UndefinedField(c, f) => {
+                format!("Field {} not found in class {}", f, c)
+            }
+            SemanticErrorKind::TypeMismatch(e, f) => {
+                format!("Type mismatch: expected {}, found {}", e, f)
+            }
+            SemanticErrorKind::IncompatibleBinaryOperators(l, op, r) => {
+                format!("Incompatible types for operator {}: {} and {}", op, l, r)
+            }
+            SemanticErrorKind::DuplicateDeclaration(n) => format!("Duplicate declaration: {}", n),
+            SemanticErrorKind::WrongArgumentCount(n, e, f) => {
+                format!(
+                    "Wrong argument count for {}: expected {}, found {}",
+                    n, e, f
+                )
+            }
+            SemanticErrorKind::NotAClass(t) => format!("Type {} is not a class", t),
+        };
+        self.diagnostics
+            .push(Diagnostic::error(msg, span.line, span.column));
+    }
+
+    pub fn analyze(&mut self, program: Program) {
         // Pass 1: Collect class info
         for stmt in &program.statements {
             if let Statement::ClassDeclaration {
@@ -74,14 +112,13 @@ impl SemanticAnalyzer {
 
         // Pass 2: Check statements
         for stmt in program.statements {
-            self.check_statement(stmt)?;
+            self.check_statement(stmt);
         }
-        Ok(())
     }
 
     fn resolve_type(&self, te: TypeExpr) -> Type {
         match te {
-            TypeExpr::Name(n) => match n.as_str() {
+            TypeExpr::Name(n, _) => match n.as_str() {
                 "i32" => Type::Int32,
                 "i64" => Type::Int64,
                 "f32" => Type::Float32,
@@ -92,14 +129,18 @@ impl SemanticAnalyzer {
                 "any" => Type::Unknown,
                 _ => Type::Class(n),
             },
-            TypeExpr::Union(tys) => {
+            TypeExpr::Union(tys, _) => {
                 Type::Union(tys.into_iter().map(|t| self.resolve_type(t)).collect())
             }
-            TypeExpr::Generic(name, args) => Type::Generic(
+            TypeExpr::Generic(name, args, _) => Type::Generic(
                 name,
                 args.into_iter().map(|t| self.resolve_type(t)).collect(),
             ),
-            _ => Type::Unknown,
+            TypeExpr::Array(base, _) => Type::Array(Box::new(self.resolve_type(*base))),
+            TypeExpr::Function(params, ret, _) => Type::Function(
+                params.into_iter().map(|p| self.resolve_type(p)).collect(),
+                Box::new(self.resolve_type(*ret)),
+            ),
         }
     }
 
@@ -177,52 +218,57 @@ impl SemanticAnalyzer {
         result
     }
 
-    fn check_statement(&mut self, stmt: Statement) -> Result<(), SemanticError> {
+    fn check_statement(&mut self, stmt: Statement) {
         match stmt {
-            Statement::VarDeclaration { name, ty, value } => {
-                let val_ty = self.check_expr(value)?;
+            Statement::VarDeclaration {
+                name,
+                ty,
+                value,
+                span,
+            } => {
+                let val_ty = self.check_expr(value);
                 let declared_ty = ty
                     .map(|t| self.resolve_type(t))
                     .unwrap_or_else(|| val_ty.clone());
                 if !self.is_assignable(&val_ty, &declared_ty) {
-                    return Err(SemanticError::TypeMismatch(
-                        format!("{:?}", declared_ty),
-                        format!("{:?}", val_ty),
-                    ));
+                    self.error(
+                        SemanticErrorKind::TypeMismatch(
+                            format!("{:?}", declared_ty),
+                            format!("{:?}", val_ty),
+                        ),
+                        span,
+                    );
                 }
                 self.scope.insert(name, declared_ty, false);
-                Ok(())
             }
-            Statement::Expression(expr) => {
-                self.check_expr(expr)?;
-                Ok(())
+            Statement::Expression(expr, _) => {
+                self.check_expr(expr);
             }
-            Statement::Print(expr) => {
-                self.check_expr(expr)?;
-                Ok(())
+            Statement::Print(expr, _) => {
+                self.check_expr(expr);
             }
-            Statement::Block(stmts) => {
+            Statement::Block(stmts, _) => {
                 self.push_scope();
                 for s in stmts {
-                    self.check_statement(s)?;
+                    self.check_statement(s);
                 }
                 self.pop_scope();
-                Ok(())
             }
             Statement::If {
                 condition,
                 then_branch,
                 else_branch,
+                span: _,
             } => {
-                let _cond_ty = self.check_expr(condition.clone())?;
+                let _cond_ty = self.check_expr(condition.clone());
 
-                if let Expr::TypeTest(ref expr, ref ty_expr) = condition {
-                    if let Expr::Variable(ref name) = **expr {
+                if let Expr::TypeTest(ref expr, ref ty_expr, _) = condition {
+                    if let Expr::Variable(ref name, _) = **expr {
                         let narrowed_ty = self.resolve_type(ty_expr.clone());
 
                         self.push_scope();
                         self.scope.insert(name.clone(), narrowed_ty.clone(), false);
-                        self.check_statement(*then_branch)?;
+                        self.check_statement(*then_branch);
                         self.pop_scope();
 
                         if let Some(eb) = else_branch {
@@ -235,33 +281,33 @@ impl SemanticAnalyzer {
 
                             self.push_scope();
                             self.scope.insert(name.clone(), excluded_ty, false);
-                            self.check_statement(*eb)?;
+                            self.check_statement(*eb);
                             self.pop_scope();
                         }
-                        return Ok(());
+                        return;
                     }
                 }
 
-                self.check_statement(*then_branch)?;
+                self.check_statement(*then_branch);
                 if let Some(eb) = else_branch {
-                    self.check_statement(*eb)?;
+                    self.check_statement(*eb);
                 }
-                Ok(())
             }
-            Statement::While { condition, body } => {
-                self.check_expr(condition)?;
-                self.check_statement(*body)?;
-                Ok(())
+            Statement::While {
+                condition, body, ..
+            } => {
+                self.check_expr(condition);
+                self.check_statement(*body);
             }
-            Statement::Return(expr) => {
-                self.check_expr(expr)?;
-                Ok(())
+            Statement::Return(expr, _) => {
+                self.check_expr(expr);
             }
             Statement::FunctionDeclaration {
                 name,
                 params,
                 return_ty,
                 body,
+                ..
             } => {
                 let param_tys: Vec<Type> = params
                     .iter()
@@ -281,15 +327,15 @@ impl SemanticAnalyzer {
                     let ty = self.resolve_type(pty);
                     self.scope.insert(pname, ty, false);
                 }
-                self.check_statement(*body)?;
+                self.check_statement(*body);
                 self.pop_scope();
-                Ok(())
             }
             Statement::ClassDeclaration {
                 name,
                 fields: _,
                 methods,
                 constructor,
+                ..
             } => {
                 self.current_class = Some(name.clone());
 
@@ -301,7 +347,7 @@ impl SemanticAnalyzer {
                         let ty = self.resolve_type(pty);
                         self.scope.insert(pname, ty, false);
                     }
-                    self.check_statement(*ctor.body)?;
+                    self.check_statement(*ctor.body);
                     self.pop_scope();
                 }
 
@@ -313,183 +359,214 @@ impl SemanticAnalyzer {
                         let ty = self.resolve_type(pty);
                         self.scope.insert(pname, ty, false);
                     }
-                    self.check_statement(*m.body)?;
+                    self.check_statement(*m.body);
                     self.pop_scope();
                 }
                 self.current_class = None;
-                Ok(())
             }
-            Statement::Error => Ok(()),
+            Statement::Error => {}
         }
     }
 
-    fn check_expr(&mut self, expr: Expr) -> Result<Type, SemanticError> {
+    fn check_expr(&mut self, expr: Expr) -> Type {
         match expr {
-            Expr::Number(_) => Ok(Type::Int32),
-            Expr::StringLiteral(_) => Ok(Type::String),
-            Expr::Variable(name) => {
-                let sym = self
-                    .scope
-                    .lookup(&name)
-                    .ok_or(SemanticError::UndefinedVariable(name))?;
-                Ok(sym.ty.clone())
-            }
-            Expr::BinaryOp(left, op, right) => {
-                let lhs = self.check_expr(*left)?;
-                let rhs = self.check_expr(*right)?;
-                if lhs.is_numeric() && rhs.is_numeric() {
-                    Ok(lhs)
+            Expr::Number(_, _) => Type::Int32,
+            Expr::StringLiteral(_, _) => Type::String,
+            Expr::Variable(name, span) => {
+                if let Some(sym) = self.scope.lookup(&name) {
+                    sym.ty.clone()
                 } else {
-                    Err(SemanticError::IncompatibleBinaryOperators(
-                        format!("{:?}", lhs),
-                        op,
-                        format!("{:?}", rhs),
-                    ))
+                    self.error(SemanticErrorKind::UndefinedVariable(name), span);
+                    Type::Unknown
                 }
             }
-            Expr::Assign(name, value) => {
-                let expected_ty = self
-                    .scope
-                    .lookup(&name)
-                    .ok_or(SemanticError::UndefinedVariable(name.clone()))?
-                    .ty
-                    .clone();
-                let val_ty = self.check_expr(*value)?;
-                if !self.is_assignable(&val_ty, &expected_ty) {
-                    return Err(SemanticError::TypeMismatch(
-                        format!("{:?}", expected_ty),
-                        format!("{:?}", val_ty),
-                    ));
+            Expr::BinaryOp(left, op, right, span) => {
+                let lhs = self.check_expr(*left);
+                let rhs = self.check_expr(*right);
+                if lhs.is_numeric() && rhs.is_numeric() {
+                    lhs
+                } else {
+                    self.error(
+                        SemanticErrorKind::IncompatibleBinaryOperators(
+                            format!("{:?}", lhs),
+                            op,
+                            format!("{:?}", rhs),
+                        ),
+                        span,
+                    );
+                    Type::Unknown
                 }
-                Ok(val_ty)
             }
-            Expr::Call(name, args) => {
+            Expr::Assign(name, value, span) => {
+                let val_ty = self.check_expr(*value);
+                if let Some(sym) = self.scope.lookup(&name) {
+                    let expected_ty = sym.ty.clone();
+                    if !self.is_assignable(&val_ty, &expected_ty) {
+                        self.error(
+                            SemanticErrorKind::TypeMismatch(
+                                format!("{:?}", expected_ty),
+                                format!("{:?}", val_ty),
+                            ),
+                            span,
+                        );
+                    }
+                } else {
+                    self.error(SemanticErrorKind::UndefinedVariable(name), span);
+                }
+                val_ty
+            }
+            Expr::Call(name, args, span) => {
                 let mut arg_tys = Vec::new();
                 for arg in args {
-                    arg_tys.push(self.check_expr(arg)?);
+                    arg_tys.push(self.check_expr(arg));
                 }
 
-                if let Some(sym) = self.scope.lookup(&name) {
-                    if let Type::Function(param_tys, ret_ty) = &sym.ty {
-                        if param_tys.len() != arg_tys.len() {
-                            return Err(SemanticError::WrongArgumentCount(
+                let function_ty = self.scope.lookup(&name).map(|s| s.ty.clone());
+
+                if let Some(Type::Function(param_tys, ret_ty)) = function_ty {
+                    if param_tys.len() != arg_tys.len() {
+                        self.error(
+                            SemanticErrorKind::WrongArgumentCount(
                                 name,
                                 param_tys.len(),
                                 arg_tys.len(),
-                            ));
+                            ),
+                            span,
+                        );
+                        return (*ret_ty).clone();
+                    }
+                    for (i, arg_ty) in arg_tys.iter().enumerate() {
+                        if !self.is_assignable(arg_ty, &param_tys[i]) {
+                            self.error(
+                                SemanticErrorKind::TypeMismatch(
+                                    format!("{:?}", param_tys[i]),
+                                    format!("{:?}", arg_ty),
+                                ),
+                                span,
+                            );
+                        }
+                    }
+                    return (*ret_ty).clone();
+                }
+                Type::Int64 // Fallback
+            }
+            Expr::New(class_name, args, span) => {
+                if !self.classes.contains_key(&class_name) {
+                    self.error(SemanticErrorKind::UndefinedClass(class_name.clone()), span);
+                }
+                for arg in args {
+                    self.check_expr(arg);
+                }
+                Type::Class(class_name)
+            }
+            Expr::MemberAccess(obj, field, span) => {
+                let obj_ty = self.check_expr(*obj);
+                if let Type::Class(class_name) = obj_ty {
+                    if let Some(class_info) = self.classes.get(&class_name) {
+                        if let Some(field_ty) = class_info.fields.get(&field) {
+                            field_ty.clone()
+                        } else {
+                            self.error(SemanticErrorKind::UndefinedField(class_name, field), span);
+                            Type::Unknown
+                        }
+                    } else {
+                        self.error(SemanticErrorKind::UndefinedClass(class_name), span);
+                        Type::Unknown
+                    }
+                } else {
+                    self.error(SemanticErrorKind::NotAClass(format!("{:?}", obj_ty)), span);
+                    Type::Unknown
+                }
+            }
+            Expr::MemberAssign(obj, field, value, span) => {
+                let obj_ty = self.check_expr(*obj);
+                let val_ty = self.check_expr(*value);
+                if let Type::Class(class_name) = obj_ty {
+                    if let Some(class_info) = self.classes.get(&class_name) {
+                        if let Some(field_ty) = class_info.fields.get(&field) {
+                            if !self.is_assignable(&val_ty, field_ty) {
+                                self.error(
+                                    SemanticErrorKind::TypeMismatch(
+                                        format!("{:?}", field_ty),
+                                        format!("{:?}", val_ty),
+                                    ),
+                                    span,
+                                );
+                            }
+                        } else {
+                            self.error(SemanticErrorKind::UndefinedField(class_name, field), span);
+                        }
+                    } else {
+                        self.error(SemanticErrorKind::UndefinedClass(class_name), span);
+                    }
+                } else {
+                    self.error(SemanticErrorKind::NotAClass(format!("{:?}", obj_ty)), span);
+                }
+                val_ty
+            }
+            Expr::MethodCall(obj, method, args, span) => {
+                let obj_ty = self.check_expr(*obj);
+                let mut arg_tys = Vec::new();
+                for arg in args {
+                    arg_tys.push(self.check_expr(arg));
+                }
+
+                if let Type::Class(class_name) = obj_ty {
+                    let method_info = self
+                        .classes
+                        .get(&class_name)
+                        .and_then(|c| c.methods.get(&method).cloned());
+
+                    if let Some((param_tys, ret_ty)) = method_info {
+                        if param_tys.len() != arg_tys.len() {
+                            self.error(
+                                SemanticErrorKind::WrongArgumentCount(
+                                    method,
+                                    param_tys.len(),
+                                    arg_tys.len(),
+                                ),
+                                span,
+                            );
+                            return ret_ty;
                         }
                         for (i, arg_ty) in arg_tys.iter().enumerate() {
                             if !self.is_assignable(arg_ty, &param_tys[i]) {
-                                return Err(SemanticError::TypeMismatch(
-                                    format!("{:?}", param_tys[i]),
-                                    format!("{:?}", arg_ty),
-                                ));
+                                self.error(
+                                    SemanticErrorKind::TypeMismatch(
+                                        format!("{:?}", param_tys[i]),
+                                        format!("{:?}", arg_ty),
+                                    ),
+                                    span,
+                                );
                             }
                         }
-                        return Ok((**ret_ty).clone());
+                        ret_ty
+                    } else {
+                        self.error(SemanticErrorKind::UndefinedMethod(class_name, method), span);
+                        Type::Unknown
                     }
-                }
-                Ok(Type::Int64)
-            }
-            Expr::New(class_name, args) => {
-                if !self.classes.contains_key(&class_name) {
-                    return Err(SemanticError::UndefinedClass(class_name));
-                }
-                for arg in args {
-                    self.check_expr(arg)?;
-                }
-                Ok(Type::Class(class_name))
-            }
-            Expr::MemberAccess(obj, field) => {
-                let obj_ty = self.check_expr(*obj)?;
-                if let Type::Class(class_name) = obj_ty {
-                    let class_info = self
-                        .classes
-                        .get(&class_name)
-                        .ok_or(SemanticError::UndefinedClass(class_name.clone()))?;
-                    let field_ty = class_info
-                        .fields
-                        .get(&field)
-                        .ok_or(SemanticError::UndefinedField(class_name, field))?
-                        .clone();
-                    Ok(field_ty)
                 } else {
-                    Err(SemanticError::NotAClass(format!("{:?}", obj_ty)))
+                    self.error(SemanticErrorKind::NotAClass(format!("{:?}", obj_ty)), span);
+                    Type::Unknown
                 }
             }
-            Expr::MemberAssign(obj, field, value) => {
-                let obj_ty = self.check_expr(*obj)?;
-                if let Type::Class(class_name) = obj_ty {
-                    let field_ty = {
-                        let class_info = self
-                            .classes
-                            .get(&class_name)
-                            .ok_or(SemanticError::UndefinedClass(class_name.clone()))?;
-                        class_info
-                            .fields
-                            .get(&field)
-                            .ok_or(SemanticError::UndefinedField(class_name, field))?
-                            .clone()
-                    };
-                    let val_ty = self.check_expr(*value)?;
-                    if !self.is_assignable(&val_ty, &field_ty) {
-                        return Err(SemanticError::TypeMismatch(
-                            format!("{:?}", field_ty),
-                            format!("{:?}", val_ty),
-                        ));
-                    }
-                    Ok(val_ty)
-                } else {
-                    Err(SemanticError::NotAClass(format!("{:?}", obj_ty)))
-                }
-            }
-            Expr::MethodCall(obj, method, args) => {
-                let obj_ty = self.check_expr(*obj)?;
-                if let Type::Class(class_name) = obj_ty {
-                    let (param_tys, ret_ty) = {
-                        let class_info = self
-                            .classes
-                            .get(&class_name)
-                            .ok_or(SemanticError::UndefinedClass(class_name.clone()))?;
-                        let (pt, rt) = class_info.methods.get(&method).ok_or(
-                            SemanticError::UndefinedMethod(class_name.clone(), method.clone()),
-                        )?;
-                        (pt.clone(), rt.clone())
-                    };
-                    if param_tys.len() != args.len() {
-                        return Err(SemanticError::WrongArgumentCount(
-                            method,
-                            param_tys.len(),
-                            args.len(),
-                        ));
-                    }
-                    for (i, arg) in args.into_iter().enumerate() {
-                        let arg_ty = self.check_expr(arg)?;
-                        if !self.is_assignable(&arg_ty, &param_tys[i]) {
-                            return Err(SemanticError::TypeMismatch(
-                                format!("{:?}", param_tys[i]),
-                                format!("{:?}", arg_ty),
-                            ));
-                        }
-                    }
-                    Ok(ret_ty)
-                } else {
-                    Err(SemanticError::NotAClass(format!("{:?}", obj_ty)))
-                }
-            }
-            Expr::This => {
+            Expr::This(span) => {
                 if let Some(class_name) = &self.current_class {
-                    Ok(Type::Class(class_name.clone()))
+                    Type::Class(class_name.clone())
                 } else {
-                    Err(SemanticError::UndefinedVariable("this".to_string()))
+                    self.error(
+                        SemanticErrorKind::UndefinedVariable("this".to_string()),
+                        span,
+                    );
+                    Type::Unknown
                 }
             }
-            Expr::TypeTest(expr, ty_expr) => {
-                self.check_expr(*expr)?;
+            Expr::TypeTest(expr, ty_expr, _) => {
+                self.check_expr(*expr);
                 self.resolve_type(ty_expr);
-                Ok(Type::Boolean)
+                Type::Boolean
             }
-            Expr::Error => panic!("Compiler bug: reaching error node in semantic analyzer"),
+            Expr::Error(_) => Type::Unknown,
         }
     }
 

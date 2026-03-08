@@ -45,6 +45,13 @@ impl DiagnosticList {
             .any(|d| d.severity == Severity::Error)
     }
 
+    pub fn errors(&self) -> Vec<&Diagnostic> {
+        self.diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect()
+    }
+
     pub fn report(&self) {
         for diag in &self.diagnostics {
             let label = match diag.severity {

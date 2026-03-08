@@ -14,6 +14,7 @@ pub enum Type {
     Null,
     Union(Vec<Type>),
     Generic(String, Vec<Type>),
+    Array(Box<Type>),
     Object(HashMap<String, Type>),
     Unknown,
 }

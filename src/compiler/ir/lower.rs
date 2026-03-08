@@ -94,6 +94,7 @@ impl Lowerer {
                     params,
                     return_ty: _,
                     body,
+                    span: _,
                 } => {
                     let pnames = params.into_iter().map(|(n, _)| n).collect();
                     functions.push(self.lower_function(name, pnames, *body, None));
@@ -103,6 +104,7 @@ impl Lowerer {
                     fields: _,
                     methods,
                     constructor,
+                    span: _,
                 } => {
                     for m in methods {
                         let mangled_name = format!("{}_{}", name, m.name);
@@ -136,7 +138,10 @@ impl Lowerer {
             functions.push(self.lower_function(
                 "main_aura".to_string(),
                 vec![],
-                Statement::Block(global_stmts),
+                Statement::Block(
+                    global_stmts,
+                    crate::compiler::ast::Span { line: 0, column: 0 },
+                ),
                 None,
             ));
         }
@@ -184,8 +189,13 @@ impl Lowerer {
 
     fn lower_statement(&mut self, stmt: Statement) {
         match stmt {
-            Statement::VarDeclaration { name, ty, value } => {
-                let class_name = if let Expr::New(ref cls, _) = value {
+            Statement::VarDeclaration {
+                name,
+                ty,
+                value,
+                span: _,
+            } => {
+                let class_name = if let Expr::New(ref cls, _, _) = value {
                     Some(cls.clone())
                 } else {
                     None
@@ -194,7 +204,7 @@ impl Lowerer {
                     .as_ref()
                     .map(|t| self.resolve_type(t.clone()))
                     .or_else(|| {
-                        if let Expr::StringLiteral(_) = value {
+                        if let Expr::StringLiteral(_, _) = value {
                             Some(Type::String)
                         } else {
                             None
@@ -239,10 +249,10 @@ impl Lowerer {
                 }
                 self.mem_vars.insert(name, (ptr_reg, class_name, sem_ty));
             }
-            Statement::Expression(expr) => {
+            Statement::Expression(expr, _) => {
                 self.lower_expr(expr);
             }
-            Statement::Print(expr) => {
+            Statement::Print(expr, _) => {
                 let val = self.lower_expr(expr);
                 if self.last_expr_ty == Type::String {
                     self.builder.call("print_str".to_string(), vec![val]);
@@ -250,7 +260,7 @@ impl Lowerer {
                     self.builder.call("print_num".to_string(), vec![val]);
                 }
             }
-            Statement::Block(stmts) => {
+            Statement::Block(stmts, _) => {
                 for s in stmts {
                     self.lower_statement(s);
                 }
@@ -259,6 +269,7 @@ impl Lowerer {
                 condition,
                 then_branch,
                 else_branch,
+                span: _,
             } => {
                 let cond_op = self.lower_expr(condition);
                 let then_label = self.builder.new_label("then");
@@ -280,7 +291,11 @@ impl Lowerer {
 
                 self.builder.set_block(merge_label);
             }
-            Statement::While { condition, body } => {
+            Statement::While {
+                condition,
+                body,
+                span: _,
+            } => {
                 let cond_label = self.builder.new_label("loop_cond");
                 let body_label = self.builder.new_label("loop_body");
                 let end_label = self.builder.new_label("loop_end");
@@ -297,7 +312,7 @@ impl Lowerer {
 
                 self.builder.set_block(end_label);
             }
-            Statement::Return(expr) => {
+            Statement::Return(expr, _) => {
                 let val = self.lower_expr(expr);
                 self.builder.ret(Some(val));
             }
@@ -307,11 +322,11 @@ impl Lowerer {
 
     fn lower_expr(&mut self, expr: Expr) -> Operand {
         match expr {
-            Expr::Number(n) => {
+            Expr::Number(n, _) => {
                 self.last_expr_ty = Type::Int32;
                 Operand::Constant(n as i64)
             }
-            Expr::StringLiteral(s) => {
+            Expr::StringLiteral(s, _) => {
                 let name = format!("str_{}", self.globals.len());
                 self.globals.push((name.clone(), s));
                 self.last_expr_ty = Type::String;
@@ -321,7 +336,7 @@ impl Lowerer {
                     vec![Operand::Constant(self.globals.len() as i64 - 1)],
                 )
             }
-            Expr::Variable(name) => {
+            Expr::Variable(name, _) => {
                 let (ptr_reg, cls_name, ty) = self
                     .mem_vars
                     .get(&name)
@@ -343,7 +358,7 @@ impl Lowerer {
                     ));
                 Operand::Value(dest)
             }
-            Expr::BinaryOp(left, op, right) => {
+            Expr::BinaryOp(left, op, right, _) => {
                 let lhs = self.lower_expr(*left);
                 let lhs_ty = self.last_expr_ty.clone();
                 let rhs = self.lower_expr(*right);
@@ -374,7 +389,7 @@ impl Lowerer {
                     _ => panic!("Unsupported operator {}", op),
                 }
             }
-            Expr::Call(name, args) => {
+            Expr::Call(name, args, _) => {
                 let (_, r_ty) = self
                     .function_tys
                     .get(&name)
@@ -384,7 +399,7 @@ impl Lowerer {
                 self.last_expr_ty = r_ty;
                 self.builder.call(name, ir_args)
             }
-            Expr::Assign(name, value) => {
+            Expr::Assign(name, value, _) => {
                 let val_op = self.lower_expr(*value);
                 let (ptr_reg, _, _) = self
                     .mem_vars
@@ -399,7 +414,7 @@ impl Lowerer {
                     ));
                 val_op
             }
-            Expr::New(class_name, args) => {
+            Expr::New(class_name, args, _) => {
                 let size = self
                     .class_layouts
                     .get(&class_name)
@@ -419,7 +434,7 @@ impl Lowerer {
                 self.last_expr_ty = Type::Class(class_name);
                 obj_reg
             }
-            Expr::This => {
+            Expr::This(_) => {
                 let (ptr_reg, _, _) = self
                     .mem_vars
                     .get("this")
@@ -439,7 +454,7 @@ impl Lowerer {
                     ));
                 Operand::Value(dest)
             }
-            Expr::MemberAccess(obj, field) => {
+            Expr::MemberAccess(obj, field, _) => {
                 let obj_op = self.lower_expr(*obj);
                 let obj_ty = self.last_expr_ty.clone();
                 if let Type::Class(cls_name) = obj_ty {
@@ -461,7 +476,7 @@ impl Lowerer {
                     panic!("Member access on non-class type {:?}", obj_ty);
                 }
             }
-            Expr::MemberAssign(obj, field, value) => {
+            Expr::MemberAssign(obj, field, value, _) => {
                 let obj_op = self.lower_expr(*obj);
                 let obj_ty = self.last_expr_ty.clone();
                 let val_op = self.lower_expr(*value);
@@ -478,7 +493,7 @@ impl Lowerer {
                     panic!("Member assign on non-class type {:?}", obj_ty);
                 }
             }
-            Expr::MethodCall(obj, method, args) => {
+            Expr::MethodCall(obj, method, args, _) => {
                 let obj_op = self.lower_expr(*obj);
                 let obj_ty = self.last_expr_ty.clone();
                 let mangled_name = if let Type::Class(cls_name) = obj_ty {
@@ -492,7 +507,7 @@ impl Lowerer {
                 self.last_expr_ty = Type::Unknown; // TODO: Lookup method return type
                 self.builder.call(mangled_name, ir_args)
             }
-            Expr::TypeTest(expr, ty_expr) => {
+            Expr::TypeTest(expr, ty_expr, _) => {
                 let _target_ty = self.resolve_type(ty_expr);
                 let val_op = self.lower_expr(*expr);
                 self.last_expr_ty = Type::Boolean;
@@ -503,13 +518,13 @@ impl Lowerer {
                     vec![val_op, Operand::Constant(1)],
                 )
             }
-            Expr::Error => panic!("Compiler bug: reaching error node in lowerer"),
+            Expr::Error(_) => panic!("Compiler bug: reaching error node in lowerer"),
         }
     }
 
     fn resolve_type(&self, te: TypeExpr) -> Type {
         match te {
-            TypeExpr::Name(n) => match n.as_str() {
+            TypeExpr::Name(n, _) => match n.as_str() {
                 "i32" => Type::Int32,
                 "i64" => Type::Int64,
                 "f32" => Type::Float32,
@@ -519,7 +534,7 @@ impl Lowerer {
                 "void" => Type::Void,
                 _ => Type::Class(n),
             },
-            TypeExpr::Union(tys) => {
+            TypeExpr::Union(tys, _) => {
                 Type::Union(tys.into_iter().map(|t| self.resolve_type(t)).collect())
             }
             _ => Type::Unknown,

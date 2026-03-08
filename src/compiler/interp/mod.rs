@@ -84,7 +84,7 @@ impl Interpreter {
 
     fn resolve_type(&self, te: TypeExpr) -> Type {
         match te {
-            TypeExpr::Name(n) => match n.as_str() {
+            TypeExpr::Name(n, _) => match n.as_str() {
                 "i32" => Type::Int32,
                 "i64" => Type::Int64,
                 "f32" => Type::Float32,
@@ -94,7 +94,7 @@ impl Interpreter {
                 "void" => Type::Void,
                 _ => Type::Class(n),
             },
-            TypeExpr::Union(tys) => Type::Union(
+            TypeExpr::Union(tys, _) => Type::Union(
                 tys.into_iter()
                     .map(|t| self.resolve_type(t))
                     .collect::<Vec<_>>(),
@@ -105,7 +105,12 @@ impl Interpreter {
 
     fn execute_statement(&mut self, stmt: Statement) -> StatementResult {
         match stmt {
-            Statement::VarDeclaration { name, ty: _, value } => {
+            Statement::VarDeclaration {
+                name,
+                ty: _,
+                value,
+                span: _,
+            } => {
                 let val = self.eval_expr(value);
                 self.env.insert(name, val);
                 StatementResult::None
@@ -115,6 +120,7 @@ impl Interpreter {
                 params,
                 return_ty,
                 body,
+                span: _,
             } => {
                 let func_val = Value::Function {
                     name: name.clone(),
@@ -133,6 +139,7 @@ impl Interpreter {
                 fields,
                 methods,
                 constructor,
+                span: _,
             } => {
                 let mut method_map = HashMap::new();
                 for m in methods {
@@ -145,11 +152,11 @@ impl Interpreter {
                 self.classes.insert(name, (field_names, method_map));
                 StatementResult::None
             }
-            Statement::Return(expr) => {
+            Statement::Return(expr, _) => {
                 let val = self.eval_expr(expr);
                 StatementResult::Return(val)
             }
-            Statement::Print(expr) => {
+            Statement::Print(expr, _) => {
                 let val = self.eval_expr(expr);
                 match val {
                     Value::Int(i) => println!("{}", i),
@@ -166,6 +173,7 @@ impl Interpreter {
                 condition,
                 then_branch,
                 else_branch,
+                span: _,
             } => {
                 let cond_val = self.eval_expr(condition);
                 if cond_val.is_truthy() {
@@ -176,7 +184,11 @@ impl Interpreter {
                     StatementResult::None
                 }
             }
-            Statement::While { condition, body } => {
+            Statement::While {
+                condition,
+                body,
+                span: _,
+            } => {
                 while self.eval_expr(condition.clone()).is_truthy() {
                     let res = self.execute_statement((*body).clone());
                     if let StatementResult::Return(_) = res {
@@ -185,7 +197,7 @@ impl Interpreter {
                 }
                 StatementResult::None
             }
-            Statement::Block(stmts) => {
+            Statement::Block(stmts, _) => {
                 self.push_scope();
                 let mut final_res = StatementResult::None;
                 for s in stmts {
@@ -198,7 +210,7 @@ impl Interpreter {
                 self.pop_scope();
                 final_res
             }
-            Statement::Expression(expr) => {
+            Statement::Expression(expr, _) => {
                 self.eval_expr(expr);
                 StatementResult::None
             }
@@ -208,13 +220,13 @@ impl Interpreter {
 
     fn eval_expr(&mut self, expr: Expr) -> Value {
         match expr {
-            Expr::Number(n) => Value::Int(n),
-            Expr::StringLiteral(s) => Value::String(s),
-            Expr::Variable(name) => self
+            Expr::Number(n, _) => Value::Int(n),
+            Expr::StringLiteral(s, _) => Value::String(s),
+            Expr::Variable(name, _) => self
                 .env
                 .lookup(&name)
                 .expect(&format!("Undefined variable {}", name)),
-            Expr::BinaryOp(lhs, op, rhs) => {
+            Expr::BinaryOp(lhs, op, rhs, _) => {
                 let left = self.eval_expr(*lhs);
                 let right = self.eval_expr(*rhs);
                 match (left, right) {
@@ -235,12 +247,12 @@ impl Interpreter {
                     _ => panic!("Operands must be integers for binary op"),
                 }
             }
-            Expr::Assign(name, val_expr) => {
+            Expr::Assign(name, val_expr, _) => {
                 let val = self.eval_expr(*val_expr);
                 self.env.assign(&name, val.clone());
                 val
             }
-            Expr::Call(name, args) => {
+            Expr::Call(name, args, _) => {
                 let func = self.env.lookup(&name).expect("Function not found");
                 if let Value::Function {
                     name: _,
@@ -268,7 +280,7 @@ impl Interpreter {
                     panic!("Not a function");
                 }
             }
-            Expr::MethodCall(obj_expr, method, args) => {
+            Expr::MethodCall(obj_expr, method, args, _) => {
                 let obj = self.eval_expr(*obj_expr);
                 if let Value::Instance(class_name, fields_ref) = obj {
                     let m = {
@@ -299,11 +311,11 @@ impl Interpreter {
                     panic!("Not an instance");
                 }
             }
-            Expr::This => self
+            Expr::This(_) => self
                 .env
                 .lookup("this")
                 .expect("Usage of this outside of class context"),
-            Expr::New(class_name, args) => {
+            Expr::New(class_name, args, _) => {
                 let (field_names, methods) = {
                     let (fnms, mths) = self
                         .classes
@@ -342,7 +354,7 @@ impl Interpreter {
                     instance
                 }
             }
-            Expr::MemberAccess(obj_expr, member) => {
+            Expr::MemberAccess(obj_expr, member, _) => {
                 let obj = self.eval_expr(*obj_expr);
                 if let Value::Instance(_, fields) = obj {
                     fields
@@ -354,7 +366,7 @@ impl Interpreter {
                     panic!("Not an instance");
                 }
             }
-            Expr::MemberAssign(obj_expr, member, val_expr) => {
+            Expr::MemberAssign(obj_expr, member, val_expr, _) => {
                 let obj = self.eval_expr(*obj_expr);
                 let val = self.eval_expr(*val_expr);
                 if let Value::Instance(_, fields) = obj {
@@ -364,7 +376,7 @@ impl Interpreter {
                     panic!("Not an instance");
                 }
             }
-            Expr::TypeTest(expr, ty_expr) => {
+            Expr::TypeTest(expr, ty_expr, _) => {
                 let val = self.eval_expr(*expr);
                 let target_ty = self.resolve_type(ty_expr);
                 // Check if val matches target_ty
@@ -374,7 +386,7 @@ impl Interpreter {
                     _ => Value::Boolean(false), // Simple match for now
                 }
             }
-            Expr::Error => panic!("Compiler bug: reaching error node in interpreter"),
+            Expr::Error(_) => panic!("Compiler bug: reaching error node in interpreter"),
         }
     }
 }
