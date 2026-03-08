@@ -6,8 +6,9 @@ Write the core library in Aura itself and upgrade the LSP to support autocomplet
 
 ## 📝 Tasks
 
-- [ ] Initialize `stdlib/` directory and create `io.aura` and `math.aura`
-- [ ] Add support for "Doc Comments" (e.g., `///`) in the Lexer and AST
-- [ ] Implement `textDocument/completion` for basic identifier and member access
-- [ ] Implement `textDocument/documentSymbol` to provide an outline of the current file
-- [ ] Update `SemanticAnalyzer` to load and analyze `stdlib` files automatically
+- [x] Initialize `stdlib/` directory and create `io.aura` and `math.aura`
+- [x] Add support for "Doc Comments" (e.g., `///`) in the Lexer and AST
+- [x] Implement `textDocument/completion` for basic identifier and member access
+- [x] Implement `textDocument/documentSymbol` to provide an outline of the current file
+- [x] Update `SemanticAnalyzer` to load and analyze `stdlib` files automatically
+- [x] Verify with `stdlib_test.aura` — semantic analysis correctly resolves `Math.abs`, `Math.max`, `IO.println` from loaded stdlib

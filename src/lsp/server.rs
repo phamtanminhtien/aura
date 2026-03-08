@@ -172,6 +172,7 @@ impl LanguageServer for Backend {
                                     detail: None,
                                     kind: SymbolKind::FIELD,
                                     tags: None,
+                                    #[allow(deprecated)]
                                     deprecated: None,
                                     range: Range {
                                         start: Position::new(
@@ -202,6 +203,7 @@ impl LanguageServer for Backend {
                                     detail: None,
                                     kind: SymbolKind::METHOD,
                                     tags: None,
+                                    #[allow(deprecated)]
                                     deprecated: None,
                                     range: Range {
                                         start: Position::new(
@@ -257,6 +259,7 @@ impl LanguageServer for Backend {
                                 detail: None,
                                 kind: SymbolKind::VARIABLE,
                                 tags: None,
+                                #[allow(deprecated)]
                                 deprecated: None,
                                 range: Range {
                                     start: Position::new(
