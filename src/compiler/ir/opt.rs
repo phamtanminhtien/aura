@@ -156,6 +156,12 @@ impl Optimizer {
                                 off,
                             ));
                         }
+                        Instruction::WriteBarrier(obj, val) => {
+                            new_instrs.push(Instruction::WriteBarrier(
+                                self.resolve_operand(&obj, &constants),
+                                self.resolve_operand(&val, &constants),
+                            ));
+                        }
                         Instruction::Load(dest, base, off) => {
                             new_instrs.push(Instruction::Load(
                                 dest,

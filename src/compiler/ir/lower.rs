@@ -107,9 +107,14 @@ impl Lowerer {
                                     let mangled_name = format!("{}_{}", name, m.name);
                                     let mut pnames = Vec::new();
                                     if !m.is_static {
-                                        pnames.push("this".to_string());
+                                        let span =
+                                            crate::compiler::ast::Span { line: 0, column: 0 };
+                                        pnames.push((
+                                            "this".to_string(),
+                                            TypeExpr::Name(name.clone(), span),
+                                        ));
                                     }
-                                    pnames.extend(m.params.into_iter().map(|(n, _)| n));
+                                    pnames.extend(m.params.clone().into_iter());
                                     functions.push(self.lower_function(
                                         mangled_name,
                                         pnames,
@@ -123,8 +128,12 @@ impl Lowerer {
                                 }
                                 if let Some(ctor) = constructor {
                                     let mangled_name = format!("{}_ctor", name);
-                                    let mut pnames = vec!["this".to_string()];
-                                    pnames.extend(ctor.params.into_iter().map(|(n, _)| n));
+                                    let span = crate::compiler::ast::Span { line: 0, column: 0 };
+                                    let mut pnames = vec![(
+                                        "this".to_string(),
+                                        TypeExpr::Name(name.clone(), span),
+                                    )];
+                                    pnames.extend(ctor.params.clone().into_iter());
                                     functions.push(self.lower_function(
                                         mangled_name,
                                         pnames,
@@ -208,7 +217,7 @@ impl Lowerer {
                     span: _,
                     doc: _,
                 } => {
-                    let pnames = params.into_iter().map(|(n, _)| n).collect();
+                    let pnames = params.clone();
                     functions.push(self.lower_function(name, pnames, *body, None));
                 }
                 Statement::ClassDeclaration {
@@ -223,9 +232,10 @@ impl Lowerer {
                         let mangled_name = format!("{}_{}", name, m.name);
                         let mut pnames = Vec::new();
                         if !m.is_static {
-                            pnames.push("this".to_string());
+                            let span = crate::compiler::ast::Span { line: 0, column: 0 };
+                            pnames.push(("this".to_string(), TypeExpr::Name(name.clone(), span)));
                         }
-                        pnames.extend(m.params.into_iter().map(|(n, _)| n));
+                        pnames.extend(m.params.clone().into_iter());
                         functions.push(self.lower_function(
                             mangled_name,
                             pnames,
@@ -239,8 +249,10 @@ impl Lowerer {
                     }
                     if let Some(ctor) = constructor {
                         let mangled_name = format!("{}_ctor", name);
-                        let mut pnames = vec!["this".to_string()];
-                        pnames.extend(ctor.params.into_iter().map(|(n, _)| n));
+                        let span = crate::compiler::ast::Span { line: 0, column: 0 };
+                        let mut pnames =
+                            vec![("this".to_string(), TypeExpr::Name(name.clone(), span))];
+                        pnames.extend(ctor.params.clone().into_iter());
                         functions.push(self.lower_function(
                             mangled_name,
                             pnames,
@@ -275,7 +287,7 @@ impl Lowerer {
     fn lower_function(
         &mut self,
         name: String,
-        params: Vec<String>,
+        params: Vec<(String, TypeExpr)>,
         body: Statement,
         class_name: Option<String>,
     ) -> IrFunction {
@@ -283,7 +295,7 @@ impl Lowerer {
         self.current_class = class_name.clone();
 
         let ir_params = vec![IrType::I64; params.len()];
-        for (i, param_name) in params.iter().enumerate() {
+        for (i, (param_name, ty_expr)) in params.iter().enumerate() {
             let ptr_reg = self.builder.new_reg();
             self.builder
                 .emit(crate::compiler::ir::instr::Instruction::Alloc(ptr_reg, 8));
@@ -296,10 +308,15 @@ impl Lowerer {
             let cls = if param_name == "this" {
                 class_name.clone()
             } else {
-                None
+                if let Type::Class(c) = self.resolve_type(ty_expr.clone()) {
+                    Some(c)
+                } else {
+                    None
+                }
             };
+            let sem_ty = self.resolve_type(ty_expr.clone());
             self.mem_vars
-                .insert(param_name.clone(), (ptr_reg, cls, None));
+                .insert(param_name.clone(), (ptr_reg, cls, Some(sem_ty)));
         }
 
         self.lower_statement(body);
@@ -608,8 +625,13 @@ impl Lowerer {
                     self.builder
                         .emit(crate::compiler::ir::instr::Instruction::Store(
                             val_op.clone(),
-                            obj_op,
+                            obj_op.clone(),
                             offset,
+                        ));
+                    self.builder
+                        .emit(crate::compiler::ir::instr::Instruction::WriteBarrier(
+                            obj_op,
+                            val_op.clone(),
                         ));
                     val_op
                 } else {
@@ -679,5 +701,93 @@ impl Lowerer {
             }
             _ => Type::Unknown,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compiler::ast::{Expr, Span, Statement, TypeExpr};
+
+    #[test]
+    fn test_lower_member_assign_write_barrier() {
+        let span = Span { line: 1, column: 1 };
+        let mut lowerer = Lowerer::new();
+
+        let program = Program {
+            statements: vec![
+                Statement::ClassDeclaration {
+                    name: "Node".to_string(),
+                    fields: vec![crate::compiler::ast::Field {
+                        name: "next".to_string(),
+                        ty: TypeExpr::Name("Node".to_string(), span),
+                        is_static: false,
+                        span,
+                        doc: None,
+                    }],
+                    methods: vec![],
+                    constructor: None,
+                    span,
+                    doc: None,
+                },
+                Statement::FunctionDeclaration {
+                    name: "set_next".to_string(),
+                    params: vec![
+                        ("n1".to_string(), TypeExpr::Name("Node".to_string(), span)),
+                        ("n2".to_string(), TypeExpr::Name("Node".to_string(), span)),
+                    ],
+                    return_ty: TypeExpr::Name("void".to_string(), span),
+                    body: Box::new(Statement::Block(
+                        vec![Statement::Expression(
+                            Expr::MemberAssign(
+                                Box::new(Expr::Variable("n1".to_string(), span)),
+                                "next".to_string(),
+                                Box::new(Expr::Variable("n2".to_string(), span)),
+                                span,
+                            ),
+                            span,
+                        )],
+                        span,
+                    )),
+                    span,
+                    doc: None,
+                },
+            ],
+        };
+
+        let module = lowerer.lower_program(program);
+
+        // Find set_next function
+        let func = module
+            .functions
+            .iter()
+            .find(|f| f.name == "set_next")
+            .expect("Function set_next not found");
+
+        let mut found_store = false;
+        let mut found_barrier = false;
+
+        for block in &func.blocks {
+            for instr in &block.instructions {
+                match instr {
+                    crate::compiler::ir::instr::Instruction::Store(_, _, _) => {
+                        found_store = true;
+                    }
+                    crate::compiler::ir::instr::Instruction::WriteBarrier(_, _) => {
+                        found_barrier = true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert!(
+            found_store,
+            "Should emit Store instruction for MemberAssign"
+        );
+        assert!(
+            found_barrier,
+            "Should emit WriteBarrier instruction right after Store for GC tracking"
+        );
     }
 }

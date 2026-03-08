@@ -213,6 +213,15 @@ impl IrCodegen {
                     .output
                     .push_str(&format!("    str x16, [x17, #{}]\n", offset));
             }
+            Instruction::WriteBarrier(obj, val) => {
+                // In Phase 5, this will call the GC write barrier runtime function.
+                // For now, it's a no-op placeholder.
+                self.load_operand(Register::X16, obj);
+                self.load_operand(Register::X17, val);
+                self.emitter
+                    .output
+                    .push_str("    // WriteBarrier(x16, x17)\n");
+            }
             Instruction::Jump(target) => {
                 self.emitter
                     .output

@@ -36,9 +36,10 @@ pub enum Instruction {
     Return(Option<Operand>),
 
     // Memory
-    Alloc(u32, u32),              // dest, size
-    Load(u32, Operand, u32),      // dest, base_ptr, offset
-    Store(Operand, Operand, u32), // src_value, base_ptr, offset
+    Alloc(u32, u32),                // dest, size
+    Load(u32, Operand, u32),        // dest, base_ptr, offset
+    Store(Operand, Operand, u32),   // src_value, base_ptr, offset
+    WriteBarrier(Operand, Operand), // object_ptr, field_ptr
 
     // Calls
     Call(u32, String, Vec<Operand>), // dest, function_name, args
