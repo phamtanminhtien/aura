@@ -7,6 +7,8 @@ edition = "2021"
 clap = { version = "4.0", features = ["derive"] }
 miette = { version = "5.10", features = ["fancy"] }
 thiserror = "1.0"
-logos = "0.14" # Lexer generation, but wait, the prompt says "Scanner: Source text -> Tokens" in lexer.rs.
-# Maybe I should write the lexer manually as common in compilers for better error control and performance.
-# Let's start with manual lexer as per project-structure definition.
+logos = "0.14"
+tower-lsp = "0.20"
+tokio = { version = "1.0", features = ["full"] }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }

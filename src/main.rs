@@ -13,6 +13,13 @@ fn main() {
     let use_ir = args.contains(&"--ir".to_string());
     let use_interp = args.contains(&"--interp".to_string());
     let print_ir = args.contains(&"--print-ir".to_string());
+    let is_lsp = args.contains(&"--lsp".to_string());
+
+    if is_lsp {
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+        rt.block_on(aura_rust::lsp::server::run_server());
+        return;
+    }
 
     let mut input_path = None;
     for arg in args.iter().skip(1) {
