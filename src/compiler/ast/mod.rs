@@ -35,7 +35,7 @@ impl TypeExpr {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Number(i32, Span),
+    Number(i64, Span),
     StringLiteral(String, Span),
     Variable(String, Span),
     BinaryOp(Box<Expr>, String, Box<Expr>, Span),

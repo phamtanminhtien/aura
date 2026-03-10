@@ -1,0 +1,17 @@
+import "std/timer";
+
+print("Start");
+
+function onTimeout100() {
+    print("Timed out after 100ms!");
+}
+
+function onTimeout50() {
+    print("Timed out after 50ms!");
+}
+
+setTimeout(onTimeout100, 100);
+setTimeout(onTimeout50, 50);
+
+print("End of main script");
+// The event loop should now take over.

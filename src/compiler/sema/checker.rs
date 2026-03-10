@@ -663,7 +663,13 @@ impl SemanticAnalyzer {
                     "+" | "-" | "*" | "/" | "%" | "|" => {
                         if lhs.is_numeric() && rhs.is_numeric() {
                             lhs
-                        } else if op == "+" && lhs == Type::String && rhs == Type::String {
+                        } else if op == "+"
+                            && (lhs == Type::String || rhs == Type::String)
+                            && (lhs.is_numeric()
+                                || rhs.is_numeric()
+                                || lhs == Type::String
+                                || rhs == Type::String)
+                        {
                             Type::String
                         } else {
                             self.error(

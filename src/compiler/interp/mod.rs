@@ -3,8 +3,9 @@ pub mod value;
 use crate::compiler::ast::{ClassMethod, Expr, Field, Program, Statement, TypeExpr};
 use crate::compiler::sema::ty::Type;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 use value::Value;
 
 #[derive(Debug, Clone)]
@@ -15,24 +16,24 @@ pub enum StatementResult {
 }
 
 pub struct Environment {
-    symbols: HashMap<String, Value>,
+    pub symbols: Rc<RefCell<HashMap<String, Value>>>,
     pub parent: Option<Box<Environment>>,
 }
 
 impl Environment {
     pub fn new(parent: Option<Box<Environment>>) -> Self {
         Self {
-            symbols: HashMap::new(),
+            symbols: Rc::new(RefCell::new(HashMap::new())),
             parent,
         }
     }
 
     pub fn insert(&mut self, name: String, val: Value) {
-        self.symbols.insert(name, val);
+        self.symbols.borrow_mut().insert(name, val);
     }
 
     pub fn lookup(&self, name: &str) -> Option<Value> {
-        if let Some(val) = self.symbols.get(name) {
+        if let Some(val) = self.symbols.borrow().get(name) {
             Some(val.clone())
         } else if let Some(ref parent) = self.parent {
             parent.lookup(name)
@@ -42,8 +43,8 @@ impl Environment {
     }
 
     pub fn assign(&mut self, name: &str, val: Value) -> bool {
-        if self.symbols.contains_key(name) {
-            self.symbols.insert(name.to_string(), val);
+        if self.symbols.borrow().contains_key(name) {
+            self.symbols.borrow_mut().insert(name.to_string(), val);
             true
         } else if let Some(ref mut parent) = self.parent {
             parent.assign(name, val)
@@ -60,6 +61,19 @@ pub struct Interpreter {
     // Static fields: class_name -> fields
     pub static_fields: HashMap<String, Rc<RefCell<HashMap<String, Value>>>>,
     pub pending_exception: Option<Value>,
+    // Timer support
+    pub timers: HashMap<i32, Timer>,
+    pub next_timer_id: i32,
+    pub env_stack: Vec<Rc<RefCell<HashMap<String, Value>>>>,
+    pub cleared_timers: HashSet<i32>,
+}
+
+pub struct Timer {
+    pub id: i32,
+    pub callback: Value,
+    pub delay: Duration,
+    pub next_run: Instant,
+    pub interval: bool,
 }
 
 impl Interpreter {
@@ -69,6 +83,10 @@ impl Interpreter {
             classes: HashMap::new(),
             static_fields: HashMap::new(),
             pending_exception: None,
+            timers: HashMap::new(),
+            next_timer_id: 1,
+            env_stack: vec![Rc::new(RefCell::new(HashMap::new()))],
+            cleared_timers: HashSet::new(),
         };
         // Register built-in Promise class (methods are handled as special cases in eval_expr)
         interp
@@ -80,6 +98,79 @@ impl Interpreter {
     pub fn interpret(&mut self, program: Program) {
         for stmt in program.statements {
             self.execute_statement(stmt);
+        }
+
+        // Event loop for timers
+        while !self.timers.is_empty() {
+            let now = Instant::now();
+            let mut to_run = Vec::new();
+
+            // Find timers that are ready
+            for (id, timer) in &self.timers {
+                if now >= timer.next_run {
+                    to_run.push(*id);
+                }
+            }
+
+            if to_run.is_empty() {
+                // Sleep until the next timer is ready
+                if let Some(min_next) = self.timers.values().map(|t| t.next_run).min() {
+                    let sleep_dur = min_next.duration_since(now);
+                    std::thread::sleep(sleep_dur);
+                }
+                continue;
+            }
+
+            for id in to_run {
+                if let Some(mut timer) = self.timers.remove(&id) {
+                    self.cleared_timers.remove(&id); // Reset for this run
+                                                     // Execute callback
+                    self.call_value(&timer.callback.clone(), vec![]);
+
+                    // Only re-insert if it wasn't cleared during execution
+                    if timer.interval && !self.cleared_timers.contains(&id) {
+                        timer.next_run = Instant::now() + timer.delay;
+                        self.timers.insert(id, timer);
+                    }
+                    self.cleared_timers.remove(&id); // Clean up
+                }
+            }
+        }
+    }
+
+    fn call_value(&mut self, func: &Value, args: Vec<Value>) -> Value {
+        match func {
+            Value::Function {
+                name: _,
+                params,
+                return_ty: _,
+                body,
+                captured_env,
+                is_async: _,
+            } => {
+                // Push captured environment onto the stack
+                let original_env_stack =
+                    std::mem::replace(&mut self.env_stack, captured_env.clone());
+                self.push_scope();
+                for (i, pname) in params.iter().enumerate() {
+                    let val = args.get(i).cloned().unwrap_or(Value::Null);
+                    self.env.insert(pname.clone(), val);
+                }
+                let res = self.execute_statement(body.clone());
+                self.pop_scope();
+                // Restore original environment stack
+                self.env_stack = original_env_stack;
+                if let StatementResult::Return(v) = res {
+                    v
+                } else if let StatementResult::Throw(e) = res {
+                    self.pending_exception = Some(e);
+                    Value::Void
+                } else {
+                    Value::Void
+                }
+            }
+            Value::NativeFunction(f) => f(args),
+            _ => panic!("Not a callable value: {:?}", func),
         }
     }
 
@@ -112,11 +203,15 @@ impl Interpreter {
     fn push_scope(&mut self) {
         let parent = std::mem::replace(&mut self.env, Box::new(Environment::new(None)));
         self.env = Box::new(Environment::new(Some(parent)));
+        self.env_stack.push(Rc::new(RefCell::new(HashMap::new()))); // Add a new scope to the stack
     }
 
     fn pop_scope(&mut self) {
-        let parent = self.env.parent.take().expect("Popped root scope");
-        self.env = parent;
+        let parent = self.env.parent.take();
+        if let Some(parent) = parent {
+            self.env = parent;
+            self.env_stack.pop();
+        }
     }
 
     fn resolve_type(&self, te: TypeExpr) -> Type {
@@ -166,14 +261,12 @@ impl Interpreter {
                 doc: _,
             } => {
                 let func_val = Value::Function {
-                    name: name.clone(),
-                    params: params
-                        .into_iter()
-                        .map(|(p, ty)| (p, self.resolve_type(ty)))
-                        .collect(),
+                    name: Some(name.clone()),
+                    params: params.into_iter().map(|(p, _)| p).collect(),
                     return_ty: self.resolve_type(return_ty),
                     body: *body,
                     is_async,
+                    captured_env: self.env_stack.clone(),
                 };
                 self.env.insert(name, func_val);
                 StatementResult::None
@@ -322,7 +415,13 @@ impl Interpreter {
             return Value::Void;
         }
         match expr {
-            Expr::Number(n, _) => Value::Int(n),
+            Expr::Number(n, _) => {
+                if n >= i32::MIN as i64 && n <= i32::MAX as i64 {
+                    Value::Int(n as i32)
+                } else {
+                    Value::Int64(n)
+                }
+            }
             Expr::Null(_) => Value::Null,
             Expr::ArrayLiteral(elements, _) => {
                 let mut vals = Vec::new();
@@ -343,6 +442,7 @@ impl Interpreter {
                             match val {
                                 Value::String(s) => out.push_str(&s),
                                 Value::Int(n) => out.push_str(&n.to_string()),
+                                Value::Int64(n) => out.push_str(&n.to_string()),
                                 Value::Boolean(b) => out.push_str(if b { "true" } else { "false" }),
                                 Value::Null => out.push_str("null"),
                                 _ => panic!("Cannot interpolate {:?}", val),
@@ -396,11 +496,34 @@ impl Interpreter {
                         "|" => Value::Int(l | r),
                         _ => panic!("Unsupported operator {} for integers", op),
                     },
+                    (Value::Int64(l), Value::Int64(r)) => match op.as_str() {
+                        "+" => Value::Int64(l + r),
+                        "-" => Value::Int64(l - r),
+                        "*" => Value::Int64(l * r),
+                        "/" => Value::Int64(l / r),
+                        "%" => Value::Int64(l % r),
+                        "==" => Value::Boolean(l == r),
+                        "!=" => Value::Boolean(l != r),
+                        "<" => Value::Boolean(l < r),
+                        "<=" => Value::Boolean(l <= r),
+                        ">" => Value::Boolean(l > r),
+                        ">=" => Value::Boolean(l >= r),
+                        "|" => Value::Int64(l | r),
+                        _ => panic!("Unsupported operator {} for i64", op),
+                    },
                     (Value::String(l), Value::String(r)) => match op.as_str() {
                         "+" => Value::String(format!("{}{}", l, r)),
                         "==" => Value::Boolean(l == r),
                         "!=" => Value::Boolean(l != r),
                         _ => panic!("Unsupported operator {} for strings", op),
+                    },
+                    (Value::String(l), Value::Int(r)) => match op.as_str() {
+                        "+" => Value::String(format!("{}{}", l, r)),
+                        _ => panic!("Unsupported operator {} for string and int", op),
+                    },
+                    (Value::Int(l), Value::String(r)) => match op.as_str() {
+                        "+" => Value::String(format!("{}{}", l, r)),
+                        _ => panic!("Unsupported operator {} for int and string", op),
                     },
                     (Value::Null, Value::Null) => match op.as_str() {
                         "==" => Value::Boolean(true),
@@ -428,6 +551,7 @@ impl Interpreter {
                     return_ty: _,
                     body,
                     is_async: _,
+                    captured_env: _, // This field is not used here, but it's part of the Value::Function enum.
                 } = func
                 {
                     let mut arg_vals = Vec::new();
@@ -435,7 +559,7 @@ impl Interpreter {
                         arg_vals.push(self.eval_expr(a));
                     }
                     self.push_scope();
-                    for (i, (pname, _)) in params.iter().enumerate() {
+                    for (i, pname) in params.iter().enumerate() {
                         self.env.insert(pname.clone(), arg_vals[i].clone());
                     }
                     let res = self.execute_statement(body);
@@ -449,6 +573,43 @@ impl Interpreter {
                         Value::Void
                     }
                 } else if let Value::NativeFunction(f) = func {
+                    // Intercept timer intrinsics
+                    match name.as_str() {
+                        "__timer_set_timeout" | "__timer_set_interval" => {
+                            let mut arg_vals = Vec::new();
+                            for a in args {
+                                arg_vals.push(self.eval_expr(a));
+                            }
+                            let callback = arg_vals.get(0).cloned().unwrap_or(Value::Null);
+                            let delay_ms = match arg_vals.get(1) {
+                                Some(Value::Int(n)) => *n as u64,
+                                _ => 0,
+                            };
+                            let id = self.next_timer_id;
+                            self.next_timer_id += 1;
+                            let timer = Timer {
+                                id,
+                                callback,
+                                delay: Duration::from_millis(delay_ms),
+                                next_run: Instant::now() + Duration::from_millis(delay_ms),
+                                interval: name == "__timer_set_interval",
+                            };
+                            self.timers.insert(id, timer);
+                            return Value::Int(id);
+                        }
+                        "__timer_clear" => {
+                            let mut arg_vals = Vec::new();
+                            for a in args {
+                                arg_vals.push(self.eval_expr(a));
+                            }
+                            if let Some(Value::Int(id)) = arg_vals.get(0) {
+                                self.timers.remove(id);
+                                self.cleared_timers.insert(*id);
+                            }
+                            return Value::Void;
+                        }
+                        _ => {}
+                    }
                     let mut arg_vals = Vec::new();
                     for a in args {
                         arg_vals.push(self.eval_expr(a));
@@ -670,7 +831,12 @@ impl Interpreter {
                     self.push_scope();
                     self.env.insert("this".to_string(), instance.clone());
                     for (i, (pname, _)) in cons.params.iter().enumerate() {
-                        self.env.insert(pname.clone(), arg_vals[i].clone());
+                        let val = if i < arg_vals.len() {
+                            arg_vals[i].clone()
+                        } else {
+                            Value::Null
+                        };
+                        self.env.insert(pname.clone(), val);
                     }
 
                     let res = self.execute_statement((*cons.body).clone());
@@ -735,7 +901,9 @@ impl Interpreter {
                 let target_ty = self.resolve_type(ty_expr);
                 match (val, target_ty) {
                     (Value::Int(_), Type::Int32) => Value::Boolean(true),
+                    (Value::Int64(_), Type::Int64) => Value::Boolean(true),
                     (Value::String(_), Type::String) => Value::Boolean(true),
+                    (Value::Boolean(_), Type::Boolean) => Value::Boolean(true),
                     _ => Value::Boolean(false),
                 }
             }
@@ -783,6 +951,7 @@ impl Interpreter {
     fn stringify(&mut self, val: Value) -> String {
         match val {
             Value::Int(i) => i.to_string(),
+            Value::Int64(i) => i.to_string(),
             Value::String(s) => s,
             Value::Boolean(b) => (if b { "true" } else { "false" }).to_string(),
             Value::Void => "void".to_string(),
@@ -832,7 +1001,7 @@ impl Interpreter {
                 s.push(']');
                 s
             }
-            Value::Function { name, .. } => format!("<Function {}>", name),
+            Value::Function { name, .. } => format!("<Function {:?}>", name),
             Value::Class(name) => format!("<Class {}>", name),
             Value::Promise(val) => format!("<Promise: resolved to {:?}>", val),
             Value::NativeFunction(_) => "<NativeFunction>".to_string(),

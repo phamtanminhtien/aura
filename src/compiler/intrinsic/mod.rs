@@ -1,7 +1,9 @@
 pub mod array;
+pub mod date;
 pub mod fs;
 pub mod net;
 pub mod string;
+pub mod timer;
 
 use crate::compiler::ast::Span;
 use crate::compiler::interp::value::Value;
@@ -13,6 +15,8 @@ pub fn register_interpreter_intrinsics(interp_env: &mut dyn FnMut(String, Value)
     string::register_string_intrinsics(interp_env);
     array::register_array_intrinsics(interp_env);
     net::register_net_intrinsics(interp_env);
+    date::register_date_intrinsics(interp_env);
+    timer::register_timer_intrinsics(interp_env);
 
     // Register common constants (macOS values for now)
     let constants = vec![
@@ -94,6 +98,75 @@ pub fn register_analyzer_intrinsics(sema_analyzer: &mut SemanticAnalyzer) {
         false,
         Span::new(0, 0),
         Some("Connect to a TCP host".to_string()),
+    );
+
+    // __date_now() -> i64
+    sema_analyzer.scope.insert(
+        "__date_now".to_string(),
+        Type::Function(vec![], Box::new(Type::Int64)),
+        false,
+        Span::new(0, 0),
+        Some("Get current timestamp in milliseconds".to_string()),
+    );
+
+    // __date_get_part(ts: i64, part: string) -> i32
+    sema_analyzer.scope.insert(
+        "__date_get_part".to_string(),
+        Type::Function(vec![Type::Int64, Type::String], Box::new(Type::Int32)),
+        false,
+        Span::new(0, 0),
+        Some("Get date part from timestamp".to_string()),
+    );
+
+    // __date_format(ts: i64, format: string) -> string
+    sema_analyzer.scope.insert(
+        "__date_format".to_string(),
+        Type::Function(vec![Type::Int64, Type::String], Box::new(Type::String)),
+        false,
+        Span::new(0, 0),
+        Some("Format a timestamp".to_string()),
+    );
+
+    // __date_parse(str: string) -> i64
+    sema_analyzer.scope.insert(
+        "__date_parse".to_string(),
+        Type::Function(vec![Type::String], Box::new(Type::Int64)),
+        false,
+        Span::new(0, 0),
+        Some("Parse a date string into a timestamp".to_string()),
+    );
+
+    // __timer_set_timeout(callback: function, delay: i32) -> i32
+    sema_analyzer.scope.insert(
+        "__timer_set_timeout".to_string(),
+        Type::Function(
+            vec![Type::Function(vec![], Box::new(Type::Void)), Type::Int32],
+            Box::new(Type::Int32),
+        ),
+        false,
+        Span::new(0, 0),
+        Some("Set a timeout".to_string()),
+    );
+
+    // __timer_set_interval(callback: function, delay: i32) -> i32
+    sema_analyzer.scope.insert(
+        "__timer_set_interval".to_string(),
+        Type::Function(
+            vec![Type::Function(vec![], Box::new(Type::Void)), Type::Int32],
+            Box::new(Type::Int32),
+        ),
+        false,
+        Span::new(0, 0),
+        Some("Set an interval".to_string()),
+    );
+
+    // __timer_clear(id: i32) -> void
+    sema_analyzer.scope.insert(
+        "__timer_clear".to_string(),
+        Type::Function(vec![Type::Int32], Box::new(Type::Void)),
+        false,
+        Span::new(0, 0),
+        Some("Clear a timer".to_string()),
     );
 
     // Register common constants

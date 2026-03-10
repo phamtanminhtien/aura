@@ -190,7 +190,7 @@ impl IrCodegen {
             }
             Instruction::Alloc(dest, size) => {
                 // Call aura_alloc(size)
-                self.emitter.mov_imm(Register::X0, size as i32);
+                self.emitter.mov_imm(Register::X0, size as i64);
                 self.emitter.call("_aura_alloc");
                 self.store_reg(dest, Register::X0);
             }
@@ -235,7 +235,7 @@ impl IrCodegen {
     fn load_operand(&mut self, reg: Register, op: Operand) {
         match op {
             Operand::Constant(c) => {
-                self.emitter.mov_imm(reg, c as i32);
+                self.emitter.mov_imm(reg, c);
             }
             Operand::Value(id) => {
                 let offset = *self

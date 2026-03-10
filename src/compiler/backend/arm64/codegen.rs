@@ -386,7 +386,7 @@ impl Codegen {
                     .get(&class_name)
                     .expect(&format!("Undefined class {}", class_name));
                 let size = fields.len() * 8;
-                self.emitter.mov_imm(Register::X0, size as i32);
+                self.emitter.mov_imm(Register::X0, size as i64);
                 self.emitter.call("_aura_alloc");
 
                 // Push result (instance) to save it while evaluating args

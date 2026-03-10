@@ -157,3 +157,4 @@ e2e_test!(test_26_fs_basic, "26_fs_basic.aura");
 e2e_test!(test_30_stdlib_string_array, "30_stdlib_string_array.aura");
 e2e_test!(test_40_net_tcp, "40_net_tcp.aura");
 e2e_test!(test_41_http_client, "41_http_client.aura");
+e2e_test!(test_44_stdlib_date, "44_stdlib_date.aura");

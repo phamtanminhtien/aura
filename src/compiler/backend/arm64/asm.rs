@@ -179,9 +179,14 @@ impl Emitter {
         self.output.push_str("    ret\n");
     }
 
-    pub fn mov_imm(&mut self, reg: Register, val: i32) {
-        self.output
-            .push_str(&format!("    mov {}, #{}\n", reg.name(), val));
+    pub fn mov_imm(&mut self, reg: Register, val: i64) {
+        if val >= -4096 && val <= 4095 {
+            self.output
+                .push_str(&format!("    mov {}, #{}\n", reg.name(), val));
+        } else {
+            self.output
+                .push_str(&format!("    ldr {}, ={}\n", reg.name(), val));
+        }
     }
 
     pub fn mov_reg(&mut self, dst: Register, src: Register) {

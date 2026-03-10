@@ -29,7 +29,7 @@ pub enum TokenKind {
     // Identifiers & Literals
     Identifier(String),
     StringLiteral(String),
-    Number(i32),
+    Number(i64),
     DocComment(String),
     /// Template literal: `Hello, ${name}! You are ${age} years old.`
     /// Pre-parsed at lex time into alternating parts.

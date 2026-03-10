@@ -1,0 +1,67 @@
+export class Date {
+    timestamp: i64;
+
+    constructor(val: i64 | string | void) {
+        if (val == null) {
+            this.timestamp = __date_now();
+        } else if (val is i64) {
+            this.timestamp = val;
+        } else if (val is string) {
+            this.timestamp = __date_parse(val);
+        } else {
+            this.timestamp = __date_now();
+        }
+    }
+
+    getTime(): i64 {
+        return this.timestamp;
+    }
+
+    getFullYear(): i32 {
+        return __date_get_part(this.timestamp, "year");
+    }
+
+    getMonth(): i32 {
+        return __date_get_part(this.timestamp, "month");
+    }
+
+    getDate(): i32 {
+        return __date_get_part(this.timestamp, "day");
+    }
+
+    getHours(): i32 {
+        return __date_get_part(this.timestamp, "hours");
+    }
+
+    getMinutes(): i32 {
+        return __date_get_part(this.timestamp, "minutes");
+    }
+
+    getSeconds(): i32 {
+        return __date_get_part(this.timestamp, "seconds");
+    }
+
+    getMilliseconds(): i32 {
+        return __date_get_part(this.timestamp, "milli");
+    }
+
+    getDay(): i32 {
+        return __date_get_part(this.timestamp, "weekday");
+    }
+
+    toISOString(): string {
+        return __date_format(this.timestamp, "%Y-%m-%dT%H:%M:%S%.3fZ");
+    }
+
+    toString(): string {
+        return __date_format(this.timestamp, "%a %b %d %Y %H:%M:%S GMT+0000 (Coordinated Universal Time)");
+    }
+
+    static now(): i64 {
+        return __date_now();
+    }
+
+    static parse(s: string): i64 {
+        return __date_parse(s);
+    }
+}

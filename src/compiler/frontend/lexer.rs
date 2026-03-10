@@ -286,7 +286,7 @@ impl<'a> Lexer<'a> {
         }
 
         let literal = &self.source[start_pos..self.pos];
-        let val: i32 = match literal.parse() {
+        let val: i64 = match literal.parse() {
             Ok(v) => v,
             Err(_) => {
                 self.diagnostics.push(Diagnostic::error(
