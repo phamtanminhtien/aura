@@ -11,17 +11,72 @@ use aura::compiler::ir::lower::Lowerer;
 use aura::compiler::ir::opt::Optimizer;
 use aura::compiler::sema::checker::SemanticAnalyzer;
 
+fn print_help() {
+    println!("Aura Compiler");
+    println!("");
+    println!("Usage: aura <command> [options] <input_file>");
+    println!("");
+    println!("Commands:");
+    println!("  build      Compile the source file into a binary");
+    println!("  run        Compile and execute the source file (default)");
+    println!("  lsp        Start the Language Server Protocol (LSP) server");
+    println!("  help       Show this help message");
+    println!("");
+    println!("Options:");
+    println!("  --ir       Use the Intermediate Representation (IR) backend");
+    println!("  --interp   Use the interpreter for execution");
+    println!("  --emit-ir  Print the generated IR and exit");
+    println!("  --target   Specify the target architecture (arm64, x86_64)");
+    std::process::exit(0);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let use_ir = args.contains(&"--ir".to_string());
-    let use_interp = args.contains(&"--interp".to_string());
-    let emit_ir = args.contains(&"--emit-ir".to_string());
-    let is_lsp = args.contains(&"--lsp".to_string());
+    
+    if args.len() <= 1 || args.contains(&"help".to_string()) || args.contains(&"--help".to_string()) {
+        print_help();
+    }
 
+    let mut command = "run";
+    let mut input_path = None;
+    let mut use_ir = false;
+    let mut use_interp = false;
+    let mut emit_ir = false;
+    let mut is_lsp = false;
     let mut target = "arm64".to_string();
-    if let Some(idx) = args.iter().position(|a| a == "--target") {
-        if idx + 1 < args.len() {
-            target = args[idx + 1].clone();
+
+    let mut skip_next = false;
+    for (i, arg) in args.iter().enumerate().skip(1) {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+
+        match arg.as_str() {
+            "run" if i == 1 => command = "run",
+            "build" if i == 1 => command = "build",
+            "lsp" if i == 1 => {
+                command = "lsp";
+                is_lsp = true;
+            }
+            "help" if i == 1 => print_help(),
+            "--ir" => use_ir = true,
+            "--interp" => use_interp = true,
+            "--emit-ir" => emit_ir = true,
+            "--lsp" => {
+                is_lsp = true;
+                command = "lsp";
+            }
+            "--target" => {
+                if i + 1 < args.len() {
+                    target = args[i + 1].clone();
+                    skip_next = true;
+                }
+            }
+            _ if !arg.starts_with("--") => {
+                input_path = Some(arg);
+            }
+            _ => {}
         }
     }
 
@@ -58,26 +113,6 @@ fn main() {
         return;
     }
 
-    let mut input_path = None;
-    let mut skip_next = false;
-    for (i, arg) in args.iter().enumerate().skip(1) {
-        if skip_next {
-            skip_next = false;
-            continue;
-        }
-        if arg == "run" && i == 1 {
-            continue;
-        }
-        if arg == "--target" {
-            skip_next = true;
-            continue;
-        }
-        if !arg.starts_with("--") {
-            input_path = Some(arg);
-            break;
-        }
-    }
-
     let (source, input_name) = if let Some(path) = input_path {
         let abs_p = std::path::Path::new(path)
             .canonicalize()
@@ -88,20 +123,14 @@ fn main() {
         });
         (content, abs_p.to_string_lossy().to_string())
     } else {
-        println!("Usage: aura [options] <input_file>");
-        println!("Options:");
-        println!("  --ir       Use IR backend");
-        println!("  --interp   Use interpreter");
-        println!("  --emit-ir  Print IR and exit");
-        println!("  --lsp      Start LSP server");
-        println!("  --target   Target architecture (arm64, x86_64)");
-        std::process::exit(1);
+        print_help();
+        return;
     };
 
     if use_interp {
         println!("Interpreting: {}", input_name);
     } else {
-        println!("Compiling: {} (IR: {})", input_name, use_ir);
+        println!("{}: {} (IR: {})", if command == "build" { "Building" } else { "Compiling" }, input_name, use_ir);
     }
 
     let mut lexer = Lexer::new(&source);
@@ -123,8 +152,6 @@ fn main() {
     if has_errors {
         std::process::exit(1);
     }
-
-    // stdlib and runtime resolution already done above
 
     // Semantic Analysis
     let mut analyzer = SemanticAnalyzer::new();
@@ -194,13 +221,19 @@ fn main() {
         std::process::exit(1);
     }
 
-    println!("--- Running Aura Program ---");
-    let output = std::process::Command::new(format!("./{}", binary_file))
-        .output()
-        .expect("Failed to execute program");
-    println!("{}", String::from_utf8_lossy(&output.stdout));
-
-    // Cleanup temporary files
+    // Assembly file is always temporary unless we specifically want it (but we don't here)
     let _ = std::fs::remove_file(&asm_file);
-    let _ = std::fs::remove_file(&binary_file);
+
+    if command == "run" {
+        println!("--- Running Aura Program ---");
+        let output = std::process::Command::new(format!("./{}", binary_file))
+            .output()
+            .expect("Failed to execute program");
+        println!("{}", String::from_utf8_lossy(&output.stdout));
+
+        // Cleanup temporary binary
+        let _ = std::fs::remove_file(&binary_file);
+    } else {
+        println!("Build successful: {}", binary_file);
+    }
 }
