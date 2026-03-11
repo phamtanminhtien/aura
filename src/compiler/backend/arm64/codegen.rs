@@ -134,7 +134,11 @@ impl Codegen {
                     let absolute_path = if path.starts_with("std/") {
                         if let Some(ref std_path) = self.stdlib_path {
                             let sub_path = &path[4..]; // remove "std/"
-                            let aura_path = format!("{}.aura", sub_path);
+                            let aura_path = if sub_path.ends_with(".aura") {
+                                sub_path.to_string()
+                            } else {
+                                format!("{}.aura", sub_path)
+                            };
                             std::path::Path::new(std_path).join(aura_path).canonicalize()
                         } else {
                             continue;
