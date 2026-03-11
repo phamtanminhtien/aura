@@ -3,9 +3,8 @@ use std::process::Command;
 pub struct Driver;
 
 impl Driver {
-    pub fn build(asm_path: &str, output_path: &str) -> std::io::Result<()> {
+    pub fn build(asm_path: &str, output_path: &str, runtime_path: &str) -> std::io::Result<()> {
         let obj_path = format!("{}.o", asm_path);
-        let runtime_path = "src/runtime/runtime.c";
         let runtime_obj = format!("{}_runtime.o", asm_path);
 
         // 1. Assemble Aura code

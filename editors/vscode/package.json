@@ -4,14 +4,12 @@
   "description": "Language support for the Aura programming language",
   "version": "0.1.0",
   "publisher": "aura-lang",
+  "icon": "icon/icon.png",
   "engines": {
     "vscode": "^1.75.0"
   },
   "categories": [
     "Programming Languages"
-  ],
-  "activationEvents": [
-    "onLanguage:aura"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -25,7 +23,11 @@
         "extensions": [
           ".aura"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icon/aura-file-icon.png",
+          "dark": "./icon/aura-file-icon.png"
+        }
       }
     ],
     "grammars": [
@@ -34,7 +36,18 @@
         "scopeName": "source.aura",
         "path": "./syntaxes/aura.tmLanguage.json"
       }
-    ]
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Aura",
+      "properties": {
+        "aura.serverPath": {
+          "type": "string",
+          "default": "aura",
+          "description": "Path to the Aura language server binary. If not specified, the extension will attempt to find it in the PATH or target/debug/aura."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

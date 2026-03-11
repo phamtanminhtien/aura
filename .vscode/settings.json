@@ -1,3 +1,17 @@
 {
-  "cSpell.words": ["codegen", "cset", "interp", "Lowerer", "pnames", "sema"]
+  "cSpell.words": [
+    "adrp",
+    "asciz",
+    "codegen",
+    "cset",
+    "fnames",
+    "interp",
+    "Lowerer",
+    "mnames",
+    "PAGEOFF",
+    "pname",
+    "pnames",
+    "sdiv",
+    "sema"
+  ]
 }

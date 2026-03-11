@@ -175,6 +175,50 @@ impl<'a> Lexer<'a> {
                         }
                         self.next_token()
                     }
+                } else if self.peek() == '*' {
+                    self.advance();
+                    let is_doc = if self.peek() == '*' {
+                        // Check next char to avoid treating /**/ as doc if desired, 
+                        // but usually /** starts a doc comment.
+                        self.advance();
+                        true
+                    } else {
+                        false
+                    };
+
+                    let start_pos = self.pos;
+                    let mut found_end = false;
+                    while !self.is_at_end() {
+                        if self.peek() == '*' {
+                            self.advance();
+                            if self.peek() == '/' {
+                                self.advance();
+                                found_end = true;
+                                break;
+                            }
+                        } else if self.peek() == '\n' {
+                            self.line += 1;
+                            self.column = 1;
+                            self.pos += 1;
+                        } else {
+                            self.advance();
+                        }
+                    }
+
+                    if is_doc {
+                        let content = if found_end {
+                            &self.source[start_pos..self.pos - 2]
+                        } else {
+                            &self.source[start_pos..self.pos]
+                        };
+                        Token::new(
+                            TokenKind::DocComment(content.to_string()),
+                            current_line,
+                            current_column,
+                        )
+                    } else {
+                        self.next_token()
+                    }
                 } else {
                     Token::new(TokenKind::Slash, current_line, current_column)
                 }

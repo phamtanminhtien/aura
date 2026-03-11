@@ -22,6 +22,7 @@ pub struct DocumentState {
 pub struct Backend {
     client: Client,
     documents: Mutex<HashMap<Url, DocumentState>>,
+    stdlib_path: String,
 }
 
 #[tower_lsp::async_trait]
@@ -107,13 +108,17 @@ impl LanguageServer for Backend {
                 let span = best_span.unwrap();
                 let doc = state.node_docs.get(&span);
 
-                let mut hover_text = format!("type: {:?}", ty);
+                let mut markdown = format!("```aura\n{}\n```", ty);
                 if let Some(doc_str) = doc {
-                    hover_text = format!("{}\n\n{}", hover_text, doc_str);
+                    markdown.push_str("\n\n---\n\n");
+                    markdown.push_str(&format_doc_comment(doc_str));
                 }
 
                 return Ok(Some(Hover {
-                    contents: HoverContents::Scalar(MarkedString::String(hover_text)),
+                    contents: HoverContents::Markup(MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: markdown,
+                    }),
                     range: None,
                 }));
             }
@@ -308,7 +313,7 @@ impl LanguageServer for Backend {
                         if let Some(obj_name) = parts.last() {
                             // 1. Static Access
                             if let Some(class_info) = state.classes.get(*obj_name) {
-                                for (mname, (p_tys, r_ty, mdoc)) in &class_info.static_methods {
+                                for (mname, (p_tys, r_ty, mdoc, _)) in &class_info.static_methods {
                                     items.push(CompletionItem {
                                         label: mname.clone(),
                                         kind: Some(CompletionItemKind::METHOD),
@@ -319,7 +324,7 @@ impl LanguageServer for Backend {
                                         ..Default::default()
                                     });
                                 }
-                                for (fname, f_ty) in &class_info.static_fields {
+                                for (fname, (f_ty, _, _)) in &class_info.static_fields {
                                     items.push(CompletionItem {
                                         label: fname.clone(),
                                         kind: Some(CompletionItemKind::FIELD),
@@ -338,7 +343,8 @@ impl LanguageServer for Backend {
                                 {
                                     if let Type::Class(class_name) = ty {
                                         if let Some(class_info) = state.classes.get(class_name) {
-                                            for (mname, (p_tys, r_ty, mdoc)) in &class_info.methods
+                                            for (mname, (p_tys, r_ty, mdoc, _)) in
+                                                &class_info.methods
                                             {
                                                 items.push(CompletionItem {
                                                     label: mname.clone(),
@@ -353,7 +359,7 @@ impl LanguageServer for Backend {
                                                     ..Default::default()
                                                 });
                                             }
-                                            for (fname, f_ty) in &class_info.fields {
+                                            for (fname, (f_ty, _, _)) in &class_info.fields {
                                                 items.push(CompletionItem {
                                                     label: fname.clone(),
                                                     kind: Some(CompletionItemKind::FIELD),
@@ -466,10 +472,11 @@ impl LanguageServer for Backend {
 }
 
 impl Backend {
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: Client, stdlib_path: String) -> Self {
         Self {
             client,
             documents: Mutex::new(HashMap::new()),
+            stdlib_path,
         }
     }
 
@@ -483,7 +490,7 @@ impl Backend {
         let program = parser.parse_program();
 
         let mut analyzer = SemanticAnalyzer::new();
-        analyzer.load_stdlib();
+        analyzer.load_stdlib(&self.stdlib_path);
         analyzer.analyze(program.clone());
 
         let mut diagnostics = Vec::new();
@@ -561,10 +568,41 @@ impl Backend {
     }
 }
 
-pub async fn run_server() {
+pub async fn run_server(stdlib_path: String) {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::new(|client| Backend::new(client));
+    let (service, socket) = LspService::new(|client| Backend::new(client, stdlib_path.clone()));
     Server::new(stdin, stdout, socket).serve(service).await;
+}
+
+fn format_doc_comment(doc: &str) -> String {
+    let mut lines: Vec<String> = doc
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with('*') {
+                let content = &trimmed[1..];
+                if content.starts_with(' ') {
+                    &content[1..]
+                } else {
+                    content
+                }
+                .trim_end()
+            } else {
+                line.trim_end()
+            }
+            .to_string()
+        })
+        .collect();
+
+    // Trim leading/trailing empty lines
+    while lines.first().map_or(false, |s| s.is_empty()) {
+        lines.remove(0);
+    }
+    while lines.last().map_or(false, |s| s.is_empty()) {
+        lines.pop();
+    }
+
+    lines.join("  \n")
 }

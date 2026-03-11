@@ -211,6 +211,7 @@ impl Lowerer {
             match stmt {
                 Statement::FunctionDeclaration {
                     name,
+                    name_span: _,
                     params,
                     return_ty: _,
                     body,
@@ -223,6 +224,7 @@ impl Lowerer {
                 }
                 Statement::ClassDeclaration {
                     name,
+                    name_span: _,
                     fields: _,
                     methods,
                     constructor,
@@ -329,12 +331,13 @@ impl Lowerer {
         match stmt {
             Statement::VarDeclaration {
                 name,
+                name_span: _,
                 ty,
                 value,
                 span: _,
                 doc: _,
             } => {
-                let mut class_name = if let Expr::New(ref cls, _, _) = value {
+                let mut class_name = if let Expr::New(ref cls, _, _, _) = value {
                     Some(cls.clone())
                 } else {
                     None
@@ -346,7 +349,7 @@ impl Lowerer {
                         Expr::StringLiteral(_, _) | Expr::Template(_, _) => {
                             sem_ty = Some(Type::String);
                         }
-                        Expr::Call(name, _, _) => {
+                        Expr::Call(name, _, _, _) => {
                             if let Some((_, ret_ty)) = self.function_tys.get(name) {
                                 sem_ty = Some(ret_ty.clone());
                                 if let Type::Class(c) = ret_ty {
@@ -561,7 +564,7 @@ impl Lowerer {
                     _ => panic!("Unsupported operator {}", op),
                 }
             }
-            Expr::Call(name, args, _) => {
+            Expr::Call(name, _, args, _) => {
                 let (_, r_ty) = self
                     .function_tys
                     .get(&name)
@@ -586,7 +589,7 @@ impl Lowerer {
                     ));
                 val_op
             }
-            Expr::New(class_name, args, _) => {
+            Expr::New(class_name, _, args, _) => {
                 let size = self
                     .class_layouts
                     .get(&class_name)
@@ -626,7 +629,7 @@ impl Lowerer {
                     ));
                 Operand::Value(dest)
             }
-            Expr::MemberAccess(obj, field, _) => {
+            Expr::MemberAccess(obj, field, _, _) => {
                 let obj_op = self.lower_expr(*obj);
                 let obj_ty = self.last_expr_ty.clone();
                 if let Type::Class(cls_name) = obj_ty {
@@ -648,7 +651,7 @@ impl Lowerer {
                     panic!("Member access on non-class type {:?}", obj_ty);
                 }
             }
-            Expr::MemberAssign(obj, field, value, _) => {
+            Expr::MemberAssign(obj, field, value, _, _) => {
                 let obj_op = self.lower_expr(*obj);
                 let obj_ty = self.last_expr_ty.clone();
                 let val_op = self.lower_expr(*value);
@@ -670,7 +673,7 @@ impl Lowerer {
                     panic!("Member assign on non-class type {:?}", obj_ty);
                 }
             }
-            Expr::MethodCall(obj, method, args, _) => {
+            Expr::MethodCall(obj, method, _, args, _) => {
                 let obj_op = self.lower_expr(*obj);
                 let obj_ty = self.last_expr_ty.clone();
                 let mut is_static = false;
@@ -730,7 +733,7 @@ impl Lowerer {
     fn resolve_type(&self, te: TypeExpr) -> Type {
         match te {
             TypeExpr::Name(n, _) => match n.as_str() {
-                "i32" | "Int32" => Type::Int32,
+                "i32" | "Int32" | "number" | "Number" => Type::Int32,
                 "i64" | "Int64" => Type::Int64,
                 "f32" | "Float32" => Type::Float32,
                 "f64" | "Float64" => Type::Float64,
@@ -761,8 +764,10 @@ mod tests {
             statements: vec![
                 Statement::ClassDeclaration {
                     name: "Node".to_string(),
+                    name_span: span,
                     fields: vec![crate::compiler::ast::Field {
                         name: "next".to_string(),
+                        name_span: span,
                         ty: TypeExpr::Name("Node".to_string(), span),
                         value: None,
                         is_static: false,
@@ -776,6 +781,7 @@ mod tests {
                 },
                 Statement::FunctionDeclaration {
                     name: "set_next".to_string(),
+                    name_span: span,
                     params: vec![
                         ("n1".to_string(), TypeExpr::Name("Node".to_string(), span)),
                         ("n2".to_string(), TypeExpr::Name("Node".to_string(), span)),
@@ -787,6 +793,7 @@ mod tests {
                                 Box::new(Expr::Variable("n1".to_string(), span)),
                                 "next".to_string(),
                                 Box::new(Expr::Variable("n2".to_string(), span)),
+                                span,
                                 span,
                             ),
                             span,

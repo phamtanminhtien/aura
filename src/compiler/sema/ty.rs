@@ -97,7 +97,7 @@ impl Type {
 impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Int32 => write!(f, "i32"),
+            Type::Int32 => write!(f, "number"),
             Type::Int64 => write!(f, "i64"),
             Type::Float32 => write!(f, "f32"),
             Type::Float64 => write!(f, "f64"),

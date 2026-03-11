@@ -306,9 +306,9 @@ impl Parser {
     ) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Function)?;
-        let name = if let TokenKind::Identifier(name) = self.peek().kind.clone() {
+        let (name, name_span) = if let Token { kind: TokenKind::Identifier(name), line, column } = self.peek().clone() {
             self.advance();
-            name
+            (name, Span::new(line, column))
         } else {
             let token = self.peek();
             self.diagnostics.push(Diagnostic::error(
@@ -347,6 +347,7 @@ impl Parser {
 
         Ok(Statement::FunctionDeclaration {
             name,
+            name_span,
             params,
             return_ty,
             body,
@@ -359,9 +360,9 @@ impl Parser {
     fn parse_let_statement(&mut self, doc: Option<String>) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Let)?;
-        let name = if let TokenKind::Identifier(name) = self.peek().kind.clone() {
+        let (name, name_span) = if let Token { kind: TokenKind::Identifier(name), line, column } = self.peek().clone() {
             self.advance();
-            name
+            (name, Span::new(line, column))
         } else {
             let token = self.peek();
             self.diagnostics.push(Diagnostic::error(
@@ -385,6 +386,7 @@ impl Parser {
 
         Ok(Statement::VarDeclaration {
             name,
+            name_span,
             ty,
             value,
             span: s,
@@ -473,9 +475,9 @@ impl Parser {
     fn parse_class_declaration(&mut self, doc: Option<String>) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Class)?;
-        let name = if let TokenKind::Identifier(name) = self.peek().kind.clone() {
+        let (name, name_span) = if let Token { kind: TokenKind::Identifier(name), line, column } = self.peek().clone() {
             self.advance();
-            name
+            (name, Span::new(line, column))
         } else {
             if !self.panic_mode {
                 let token = self.peek();
@@ -535,6 +537,7 @@ impl Parser {
                     let body = Box::new(self.parse_block());
                     constructor = Some(ClassMethod {
                         name: "constructor".to_string(),
+                        name_span: ms,
                         params,
                         return_ty: TypeExpr::Name(name.clone(), ms),
                         body,
@@ -546,9 +549,9 @@ impl Parser {
                 }
                 TokenKind::Function => {
                     self.advance();
-                    let mname = if let TokenKind::Identifier(mname) = self.peek().kind.clone() {
+                    let (mname, mname_span) = if let Token { kind: TokenKind::Identifier(mname), line, column } = self.peek().clone() {
                         self.advance();
-                        Some(mname)
+                        (mname, Span::new(line, column))
                     } else {
                         if !self.panic_mode {
                             let token = self.peek();
@@ -559,14 +562,13 @@ impl Parser {
                             ));
                             self.panic_mode = true;
                         }
-                        None
+                        (String::new(), Span::new(0, 0))
                     };
 
-                    if mname.is_none() {
+                    if mname.is_empty() {
                         self.synchronize();
                         continue;
                     }
-                    let mname = mname.unwrap();
 
                     let _ = self.consume(TokenKind::OpenParen);
                     let mut params = Vec::new();
@@ -595,6 +597,7 @@ impl Parser {
                     let body = Box::new(self.parse_block());
                     methods.push(ClassMethod {
                         name: mname,
+                        name_span: mname_span,
                         params,
                         return_ty,
                         body,
@@ -636,6 +639,7 @@ impl Parser {
                         let body = Box::new(self.parse_block());
                         methods.push(ClassMethod {
                             name: fname,
+                            name_span: fs,
                             params,
                             return_ty,
                             body,
@@ -657,6 +661,7 @@ impl Parser {
                         let _ = self.consume(TokenKind::Semicolon);
                         fields.push(Field {
                             name: fname,
+                            name_span: fs,
                             ty: fty,
                             value,
                             is_static,
@@ -684,6 +689,7 @@ impl Parser {
 
         Ok(Statement::ClassDeclaration {
             name,
+            name_span,
             fields,
             methods,
             constructor,
@@ -701,8 +707,8 @@ impl Parser {
             let value = self.parse_expression();
             if let Expr::Variable(name, vs) = node {
                 return Expr::Assign(name, Box::new(value), vs);
-            } else if let Expr::MemberAccess(obj, member, ms) = node {
-                return Expr::MemberAssign(obj, member, Box::new(value), ms);
+            } else if let Expr::MemberAccess(obj, member, name_span, _ms) = node {
+                return Expr::MemberAssign(obj, member, Box::new(value), name_span, s);
             } else {
                 let token = self.peek();
                 self.diagnostics.push(Diagnostic::error(
@@ -891,10 +897,11 @@ impl Parser {
                 Expr::This(s)
             }
             TokenKind::New => {
+                let ns = self.span();
                 self.advance();
-                let name = if let TokenKind::Identifier(name) = self.peek().kind.clone() {
+                let (name, name_span) = if let Token { kind: TokenKind::Identifier(name), line, column } = self.peek().clone() {
                     self.advance();
-                    name
+                    (name, Span::new(line, column))
                 } else {
                     if !self.panic_mode {
                         let token = self.peek();
@@ -905,7 +912,7 @@ impl Parser {
                         ));
                         self.panic_mode = true;
                     }
-                    "Error".to_string()
+                    ("Error".to_string(), Span::new(0, 0))
                 };
 
                 let _ = self.consume(TokenKind::OpenParen);
@@ -917,7 +924,7 @@ impl Parser {
                     }
                 }
                 let _ = self.consume(TokenKind::CloseParen);
-                Expr::New(name, args, s)
+                Expr::New(name, name_span, args, ns)
             }
             TokenKind::OpenParen => {
                 self.advance();
@@ -976,9 +983,14 @@ impl Parser {
             match self.peek().kind {
                 TokenKind::Dot => {
                     self.advance();
-                    let member = if let TokenKind::Identifier(m) = self.peek().kind.clone() {
+                    let (member, name_span) = if let Token {
+                        kind: TokenKind::Identifier(m),
+                        line,
+                        column,
+                    } = self.peek().clone()
+                    {
                         self.advance();
-                        Some(m)
+                        (Some(m), Span::new(line, column))
                     } else {
                         if !self.panic_mode {
                             let token = self.peek();
@@ -989,10 +1001,10 @@ impl Parser {
                             ));
                             self.panic_mode = true;
                         }
-                        None
+                        (None, Span::new(0, 0))
                     };
                     if let Some(m) = member {
-                        node = Expr::MemberAccess(Box::new(node), m, s);
+                        node = Expr::MemberAccess(Box::new(node), m, name_span, s);
                     } else {
                         node = Expr::Error(s);
                     }
@@ -1018,10 +1030,10 @@ impl Parser {
                     }
                     let _ = self.consume(TokenKind::CloseParen);
 
-                    if let Expr::Variable(name, _) = node.clone() {
-                        node = Expr::Call(name, args, s);
-                    } else if let Expr::MemberAccess(obj, member, _) = node.clone() {
-                        node = Expr::MethodCall(obj, member, args, s);
+                    if let Expr::Variable(name, name_span) = node.clone() {
+                        node = Expr::Call(name, name_span, args, s);
+                    } else if let Expr::MemberAccess(obj, member, name_span, _) = node.clone() {
+                        node = Expr::MethodCall(obj, member, name_span, args, s);
                     } else {
                         if !self.panic_mode {
                             let token = self.peek();

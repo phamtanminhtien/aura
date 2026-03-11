@@ -6,10 +6,10 @@ use std::collections::HashMap;
 
 pub struct ClassInfo {
     pub name: String,
-    pub fields: HashMap<String, Type>,
-    pub static_fields: HashMap<String, Type>,
-    pub methods: HashMap<String, (Vec<Type>, Type, Option<String>)>, // name -> (params, return_ty, doc)
-    pub static_methods: HashMap<String, (Vec<Type>, Type, Option<String>)>,
+    pub fields: HashMap<String, (Type, Span, Option<String>)>, // Type, Span, Doc
+    pub static_fields: HashMap<String, (Type, Span, Option<String>)>,
+    pub methods: HashMap<String, (Vec<Type>, Type, Option<String>, Span)>, // params, ret, doc, span
+    pub static_methods: HashMap<String, (Vec<Type>, Type, Option<String>, Span)>,
     pub span: Span,
     pub doc: Option<String>,
 }
@@ -41,6 +41,7 @@ pub struct SemanticAnalyzer {
     pub node_types: HashMap<Span, Type>,
     pub node_definitions: HashMap<Span, Span>,
     pub node_docs: HashMap<Span, String>,
+    pub record_node_info: bool,
 }
 
 impl SemanticAnalyzer {
@@ -53,6 +54,7 @@ impl SemanticAnalyzer {
             node_types: HashMap::new(),
             node_definitions: HashMap::new(),
             node_docs: HashMap::new(),
+            record_node_info: false,
         };
 
         // Register built-in Promise class
@@ -68,6 +70,7 @@ impl SemanticAnalyzer {
                     vec![Type::Array(Box::new(Type::Unknown))],
                 ),
                 Some("Waits for all promises to be resolved".to_string()),
+                Span::new(0, 0),
             ),
         );
         static_methods.insert(
@@ -79,6 +82,7 @@ impl SemanticAnalyzer {
                     vec![Type::Array(Box::new(Type::Unknown))],
                 ),
                 Some("Waits for all promises to be settled".to_string()),
+                Span::new(0, 0),
             ),
         );
         static_methods.insert(
@@ -87,6 +91,7 @@ impl SemanticAnalyzer {
                 vec![Type::Array(Box::new(Type::Unknown))],
                 Type::Generic("Promise".to_string(), vec![Type::Unknown]),
                 Some("Waits for any promise to be resolved".to_string()),
+                Span::new(0, 0),
             ),
         );
         static_methods.insert(
@@ -95,6 +100,7 @@ impl SemanticAnalyzer {
                 vec![Type::Array(Box::new(Type::Unknown))],
                 Type::Generic("Promise".to_string(), vec![Type::Unknown]),
                 Some("Waits for the first promise to be settled".to_string()),
+                Span::new(0, 0),
             ),
         );
 
@@ -144,6 +150,7 @@ impl SemanticAnalyzer {
     }
 
     pub fn analyze(&mut self, program: Program) {
+        self.record_node_info = true;
         // Pass 1: Collect class info from current program
         self.collect_classes(&program);
 
@@ -162,6 +169,7 @@ impl SemanticAnalyzer {
 
             if let Statement::ClassDeclaration {
                 name,
+                name_span,
                 fields,
                 methods,
                 constructor: _,
@@ -174,9 +182,9 @@ impl SemanticAnalyzer {
                 for f in fields {
                     let ty = self.resolve_type(f.ty.clone());
                     if f.is_static {
-                        static_field_map.insert(f.name.clone(), ty);
+                        static_field_map.insert(f.name.clone(), (ty, f.name_span, f.doc.clone()));
                     } else {
-                        field_map.insert(f.name.clone(), ty);
+                        field_map.insert(f.name.clone(), (ty, f.name_span, f.doc.clone()));
                     }
                 }
                 let mut method_map = HashMap::new();
@@ -189,12 +197,55 @@ impl SemanticAnalyzer {
                         .collect();
                     let ret_ty = self.resolve_type(m.return_ty.clone());
                     if m.is_static {
-                        static_method_map
-                            .insert(m.name.clone(), (param_tys, ret_ty, m.doc.clone()));
+                        static_method_map.insert(
+                            m.name.clone(),
+                            (param_tys, ret_ty, m.doc.clone(), m.name_span),
+                        );
                     } else {
-                        method_map.insert(m.name.clone(), (param_tys, ret_ty, m.doc.clone()));
+                        method_map.insert(
+                            m.name.clone(),
+                            (param_tys, ret_ty, m.doc.clone(), m.name_span),
+                        );
                     }
                 }
+                if self.record_node_info {
+                    if let Some(d) = doc {
+                        self.node_docs.insert(*name_span, d.clone());
+                    }
+                    self.node_types.insert(*name_span, Type::Class(name.clone()));
+                }
+                for f in fields {
+                    if self.record_node_info {
+                        if let Some(d) = &f.doc {
+                            self.node_docs.insert(f.name_span, d.clone());
+                        }
+                        let fty_info = field_map
+                            .get(&f.name)
+                            .or(static_field_map.get(&f.name))
+                            .cloned();
+                        if let Some((t, _, _)) = fty_info {
+                            self.node_types.insert(f.name_span, t);
+                        }
+                    }
+                }
+                for m in methods {
+                    if self.record_node_info {
+                        if let Some(d) = &m.doc {
+                            self.node_docs.insert(m.name_span, d.clone());
+                        }
+                        let mty_info = method_map
+                            .get(&m.name)
+                            .or(static_method_map.get(&m.name))
+                            .cloned();
+                        if let Some((params, ret, _, _)) = mty_info {
+                            self.node_types.insert(
+                                m.name_span,
+                                Type::Function(params, Box::new(ret)),
+                            );
+                        }
+                    }
+                }
+
                 self.classes.insert(
                     name.clone(),
                     ClassInfo {
@@ -211,8 +262,7 @@ impl SemanticAnalyzer {
         }
     }
 
-    pub fn load_stdlib(&mut self) {
-        let stdlib_path = "stdlib/std";
+    pub fn load_stdlib(&mut self, stdlib_path: &str) {
         if let Ok(entries) = std::fs::read_dir(stdlib_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -232,7 +282,7 @@ impl SemanticAnalyzer {
     fn resolve_type(&self, te: TypeExpr) -> Type {
         match te {
             TypeExpr::Name(n, _) => match n.as_str() {
-                "i32" | "Int32" => Type::Int32,
+                "i32" | "Int32" | "number" | "Number" => Type::Int32,
                 "i64" | "Int64" => Type::Int64,
                 "f32" | "Float32" => Type::Float32,
                 "f64" | "Float64" => Type::Float64,
@@ -312,8 +362,8 @@ impl SemanticAnalyzer {
 
                 if let (Some(si), Some(ti)) = (src_info, tgt_info) {
                     let mut all_match = true;
-                    for (name, tgt_ty) in &ti.fields {
-                        if let Some(src_ty) = si.fields.get(name) {
+                    for (name, (tgt_ty, _, _)) in &ti.fields {
+                        if let Some((src_ty, _, _)) = si.fields.get(name) {
                             if !self.is_assignable_internal(src_ty, tgt_ty, history) {
                                 all_match = false;
                                 break;
@@ -340,6 +390,7 @@ impl SemanticAnalyzer {
         match stmt {
             Statement::VarDeclaration {
                 name,
+                name_span,
                 ty,
                 value,
                 span,
@@ -357,6 +408,12 @@ impl SemanticAnalyzer {
                         ),
                         span,
                     );
+                }
+                if self.record_node_info {
+                    if let Some(d) = &doc {
+                        self.node_docs.insert(name_span, d.clone());
+                    }
+                    self.node_types.insert(name_span, declared_ty.clone());
                 }
                 self.scope.insert(name, declared_ty, false, span, doc);
             }
@@ -425,6 +482,7 @@ impl SemanticAnalyzer {
             }
             Statement::FunctionDeclaration {
                 name,
+                name_span,
                 params,
                 return_ty,
                 body,
@@ -440,13 +498,20 @@ impl SemanticAnalyzer {
                 let doc_clone = doc.clone();
 
                 // Register function before checking body for recursion
+                let func_ty = Type::Function(param_tys.clone(), Box::new(ret_ty.clone()));
                 self.scope.insert(
                     name.clone(),
-                    Type::Function(param_tys.clone(), Box::new(ret_ty.clone())),
+                    func_ty.clone(),
                     false,
                     span,
                     doc_clone,
                 );
+                if self.record_node_info {
+                    if let Some(d) = &doc {
+                        self.node_docs.insert(name_span, d.clone());
+                    }
+                    self.node_types.insert(name_span, func_ty);
+                }
 
                 self.push_scope();
                 for (pname, pty) in params {
@@ -458,6 +523,7 @@ impl SemanticAnalyzer {
             }
             Statement::ClassDeclaration {
                 name,
+                name_span: _,
                 fields,
                 methods,
                 constructor,
@@ -605,10 +671,12 @@ impl SemanticAnalyzer {
             Expr::Error(_s) => Type::Unknown,
             Expr::Variable(name, span) => {
                 if let Some(sym) = self.scope.lookup(&name) {
-                    if let Some(doc) = &sym.doc {
-                        self.node_docs.insert(span, doc.clone());
+                    if self.record_node_info {
+                        if let Some(doc) = &sym.doc {
+                            self.node_docs.insert(span, doc.clone());
+                        }
+                        self.node_definitions.insert(span, sym.span);
                     }
-                    self.node_definitions.insert(span, sym.span);
                     sym.ty.clone()
                 } else if self.classes.contains_key(&name) {
                     Type::Class(name)
@@ -704,7 +772,7 @@ impl SemanticAnalyzer {
                 }
                 val_ty
             }
-            Expr::Call(name, args, span) => {
+            Expr::Call(name, name_span, args, span) => {
                 let mut arg_tys = Vec::new();
                 for arg in args {
                     arg_tys.push(self.check_expr(arg));
@@ -712,11 +780,19 @@ impl SemanticAnalyzer {
 
                 let sym = self.scope.lookup(&name);
                 let function_ty = sym.map(|s| s.ty.clone());
-                if let Some(s) = sym {
-                    self.node_definitions.insert(span, s.span);
-                }
 
                 if let Some(Type::Function(param_tys, ret_ty)) = function_ty {
+                    if self.record_node_info {
+                        if let Some(sym) = self.scope.lookup(&name) {
+                            if let Some(doc) = &sym.doc {
+                                self.node_docs.insert(name_span, doc.clone());
+                            }
+                            self.node_definitions.insert(name_span, sym.span);
+                            self.node_types.insert(name_span, Type::Function(param_tys.clone(), ret_ty.clone()));
+                        }
+                        // Also record return type for the whole call span
+                        self.node_types.insert(span, (*ret_ty).clone());
+                    }
                     if param_tys.len() != arg_tys.len() {
                         self.error(
                             SemanticErrorKind::WrongArgumentCount(
@@ -744,12 +820,17 @@ impl SemanticAnalyzer {
                     Type::Int32 // Default for now
                 }
             }
-            Expr::New(class_name, args, span) => {
+            Expr::New(class_name, name_span, args, span) => {
                 if let Some(class_info) = self.classes.get(&class_name) {
-                    if let Some(doc) = &class_info.doc {
-                        self.node_docs.insert(span, doc.clone());
+                    if self.record_node_info {
+                        if let Some(doc) = &class_info.doc {
+                            self.node_docs.insert(name_span, doc.clone());
+                        }
+                        self.node_definitions.insert(name_span, class_info.span);
+                        self.node_types.insert(name_span, Type::Class(class_name.clone()));
+                        // Also record for the whole expression
+                        self.node_types.insert(span, Type::Class(class_name.clone()));
                     }
-                    self.node_definitions.insert(span, class_info.span);
                 } else {
                     self.error(SemanticErrorKind::UndefinedClass(class_name.clone()), span);
                 }
@@ -758,16 +839,30 @@ impl SemanticAnalyzer {
                 }
                 Type::Class(class_name)
             }
-            Expr::MemberAccess(obj, field, span) => {
+            Expr::MemberAccess(obj, field, name_span, span) => {
                 let obj_ty = self.check_expr(*obj);
                 if let Type::Class(class_name) = obj_ty {
                     if let Some(class_info) = self.classes.get(&class_name) {
-                        if let Some(field_ty) = class_info.fields.get(&field) {
-                            field_ty.clone()
-                        } else if let Some(field_ty) = class_info.static_fields.get(&field) {
-                            field_ty.clone()
+                        let field_info = class_info
+                            .fields
+                            .get(&field)
+                            .or(class_info.static_fields.get(&field))
+                            .cloned();
+
+                        if let Some((field_ty, field_span, doc)) = field_info {
+                            if self.record_node_info {
+                                if let Some(d) = doc {
+                                    self.node_docs.insert(name_span, d);
+                                }
+                                self.node_definitions.insert(name_span, field_span);
+                                self.node_types.insert(name_span, field_ty.clone());
+                            }
+                            field_ty
                         } else {
-                            self.error(SemanticErrorKind::UndefinedField(class_name, field), span);
+                            self.error(
+                                SemanticErrorKind::UndefinedField(class_name, field),
+                                name_span,
+                            );
                             Type::Unknown
                         }
                     } else {
@@ -779,33 +874,54 @@ impl SemanticAnalyzer {
                     Type::Unknown
                 }
             }
-            Expr::MemberAssign(obj, field, value, span) => {
+            Expr::MemberAssign(obj, field, value, name_span, span) => {
                 let obj_ty = self.check_expr(*obj);
                 let val_ty = self.check_expr(*value);
-                if let Type::Class(class_name) = obj_ty {
-                    if let Some(class_info) = self.classes.get(&class_name) {
-                        if let Some(field_ty) = class_info.fields.get(&field) {
-                            if !self.is_assignable(&val_ty, field_ty) {
-                                self.error(
-                                    SemanticErrorKind::TypeMismatch(
-                                        format!("{:?}", field_ty),
-                                        format!("{:?}", val_ty),
-                                    ),
-                                    span,
-                                );
-                            }
-                        } else {
-                            self.error(SemanticErrorKind::UndefinedField(class_name, field), span);
-                        }
+
+                let field_info = if let Type::Class(ref class_name) = obj_ty {
+                    if let Some(class_info) = self.classes.get(class_name) {
+                        class_info.fields.get(&field).cloned()
                     } else {
-                        self.error(SemanticErrorKind::UndefinedClass(class_name), span);
+                        None
                     }
                 } else {
-                    self.error(SemanticErrorKind::NotAClass(format!("{:?}", obj_ty)), span);
+                    None
+                };
+
+                if let Some((field_ty, field_span, doc)) = field_info {
+                    if !self.is_assignable(&val_ty, &field_ty) {
+                        self.error(
+                            SemanticErrorKind::TypeMismatch(
+                                format!("{:?}", field_ty),
+                                format!("{:?}", val_ty),
+                            ),
+                            span,
+                        );
+                    }
+                    if self.record_node_info {
+                        if let Some(d) = doc {
+                            self.node_docs.insert(name_span, d);
+                        }
+                        self.node_definitions.insert(name_span, field_span);
+                        self.node_types.insert(name_span, field_ty);
+                    }
+                } else {
+                    if let Type::Class(class_name) = obj_ty {
+                        if self.classes.contains_key(&class_name) {
+                            self.error(
+                                SemanticErrorKind::UndefinedField(class_name, field),
+                                name_span,
+                            );
+                        } else {
+                            self.error(SemanticErrorKind::UndefinedClass(class_name), span);
+                        }
+                    } else {
+                        self.error(SemanticErrorKind::NotAClass(format!("{:?}", obj_ty)), span);
+                    }
                 }
                 val_ty
             }
-            Expr::MethodCall(obj, method, args, span) => {
+            Expr::MethodCall(obj, method, name_span, args, span) => {
                 let obj_ty = self.check_expr(*obj);
                 let mut arg_tys = Vec::new();
                 for arg in args {
@@ -823,9 +939,17 @@ impl SemanticAnalyzer {
                         None
                     };
 
-                    if let Some((param_tys, ret_ty, doc)) = method_info {
-                        if let Some(d) = doc {
-                            self.node_docs.insert(span, d.clone());
+                    if let Some((param_tys, ret_ty, doc, mspan)) = method_info {
+                        if self.record_node_info {
+                            if let Some(d) = doc {
+                                self.node_docs.insert(name_span, d.clone());
+                            }
+                            self.node_definitions.insert(name_span, mspan);
+                            self.node_types.insert(
+                                name_span,
+                                Type::Function(param_tys.clone(), Box::new(ret_ty.clone())),
+                            );
+                            self.node_types.insert(span, ret_ty.clone());
                         }
 
                         if param_tys.len() != arg_tys.len() {
@@ -964,7 +1088,9 @@ impl SemanticAnalyzer {
                 }
             }
         };
-        self.node_types.insert(span, ty.clone());
+        if self.record_node_info {
+            self.node_types.insert(span, ty.clone());
+        }
         ty
     }
 

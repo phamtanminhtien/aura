@@ -40,12 +40,12 @@ pub enum Expr {
     Variable(String, Span),
     BinaryOp(Box<Expr>, String, Box<Expr>, Span),
     Assign(String, Box<Expr>, Span),
-    Call(String, Vec<Expr>, Span),
-    MethodCall(Box<Expr>, String, Vec<Expr>, Span),
+    Call(String, Span, Vec<Expr>, Span),
+    MethodCall(Box<Expr>, String, Span, Vec<Expr>, Span),
     This(Span),
-    New(String, Vec<Expr>, Span),
-    MemberAccess(Box<Expr>, String, Span),
-    MemberAssign(Box<Expr>, String, Box<Expr>, Span),
+    New(String, Span, Vec<Expr>, Span),
+    MemberAccess(Box<Expr>, String, Span, Span),
+    MemberAssign(Box<Expr>, String, Box<Expr>, Span, Span),
     UnaryOp(String, Box<Expr>, Span),
     Throw(Box<Expr>, Span),
     TypeTest(Box<Expr>, TypeExpr, Span),
@@ -74,12 +74,12 @@ impl Expr {
             Expr::Variable(_, s) => *s,
             Expr::BinaryOp(_, _, _, s) => *s,
             Expr::Assign(_, _, s) => *s,
-            Expr::Call(_, _, s) => *s,
-            Expr::MethodCall(_, _, _, s) => *s,
+            Expr::Call(_, _, _, s) => *s,
+            Expr::MethodCall(_, _, _, _, s) => *s,
             Expr::This(s) => *s,
-            Expr::New(_, _, s) => *s,
-            Expr::MemberAccess(_, _, s) => *s,
-            Expr::MemberAssign(_, _, _, s) => *s,
+            Expr::New(_, _, _, s) => *s,
+            Expr::MemberAccess(_, _, _, s) => *s,
+            Expr::MemberAssign(_, _, _, _, s) => *s,
             Expr::UnaryOp(_, _, s) => *s,
             Expr::Throw(_, s) => *s,
             Expr::TypeTest(_, _, s) => *s,
@@ -96,6 +96,7 @@ impl Expr {
 #[derive(Debug, Clone)]
 pub struct Field {
     pub name: String,
+    pub name_span: Span,
     pub ty: TypeExpr,
     pub value: Option<Expr>,
     pub is_static: bool,
@@ -106,6 +107,7 @@ pub struct Field {
 #[derive(Debug, Clone)]
 pub struct ClassMethod {
     pub name: String,
+    pub name_span: Span,
     pub params: Vec<(String, TypeExpr)>,
     pub return_ty: TypeExpr,
     pub body: Box<Statement>,
@@ -125,6 +127,7 @@ pub enum ImportItem {
 pub enum Statement {
     VarDeclaration {
         name: String,
+        name_span: Span,
         ty: Option<TypeExpr>,
         value: Expr,
         span: Span,
@@ -132,6 +135,7 @@ pub enum Statement {
     },
     FunctionDeclaration {
         name: String,
+        name_span: Span,
         params: Vec<(String, TypeExpr)>,
         return_ty: TypeExpr,
         body: Box<Statement>,
@@ -141,6 +145,7 @@ pub enum Statement {
     },
     ClassDeclaration {
         name: String,
+        name_span: Span,
         fields: Vec<Field>,
         methods: Vec<ClassMethod>,
         constructor: Option<ClassMethod>,

@@ -25,14 +25,53 @@ fn main() {
         }
     }
 
+    // stdlib and runtime resolution
+    let (stdlib_path, runtime_path) = std::env::var("AURA_STDLIB").map(|s| (s, std::env::var("AURA_RUNTIME").unwrap_or_else(|_| "src/runtime/runtime.c".to_string()))).unwrap_or_else(|_| {
+        let mut s_path = "stdlib/std".to_string();
+        let mut r_path = "src/runtime/runtime.c".to_string();
+
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                // Try relative to exe
+                let p1_s = exe_dir.join("stdlib/std");
+                let p1_r = exe_dir.join("src/runtime/runtime.c");
+                if p1_s.exists() && p1_r.exists() {
+                    s_path = p1_s.to_string_lossy().to_string();
+                    r_path = p1_r.to_string_lossy().to_string();
+                } else {
+                    // Try dev environment (target/debug)
+                    let p2_s = exe_dir.join("../../stdlib/std");
+                    let p2_r = exe_dir.join("../../src/runtime/runtime.c");
+                    if p2_s.exists() && p2_r.exists() {
+                        s_path = p2_s.to_string_lossy().to_string();
+                        r_path = p2_r.to_string_lossy().to_string();
+                    }
+                }
+            }
+        }
+        (s_path, r_path)
+    });
+
     if is_lsp {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
-        rt.block_on(aura::lsp::server::run_server());
+        rt.block_on(aura::lsp::server::run_server(stdlib_path));
         return;
     }
 
     let mut input_path = None;
-    for arg in args.iter().skip(1) {
+    let mut skip_next = false;
+    for (i, arg) in args.iter().enumerate().skip(1) {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if arg == "run" && i == 1 {
+            continue;
+        }
+        if arg == "--target" {
+            skip_next = true;
+            continue;
+        }
         if !arg.starts_with("--") {
             input_path = Some(arg);
             break;
@@ -40,10 +79,11 @@ fn main() {
     }
 
     let (source, input_name) = if let Some(path) = input_path {
-        (
-            std::fs::read_to_string(path).expect("Unable to read file"),
-            path.clone(),
-        )
+        let content = std::fs::read_to_string(path).unwrap_or_else(|e| {
+            eprintln!("Error: Unable to read file '{}': {}", path, e);
+            std::process::exit(1);
+        });
+        (content, path.clone())
     } else {
         println!("Usage: aura [options] <input_file>");
         println!("Options:");
@@ -81,10 +121,12 @@ fn main() {
         std::process::exit(1);
     }
 
+    // stdlib and runtime resolution already done above
+
     // Semantic Analysis
     let mut analyzer = SemanticAnalyzer::new();
     register_analyzer_intrinsics(&mut analyzer);
-    analyzer.load_stdlib();
+    analyzer.load_stdlib(&stdlib_path);
     analyzer.analyze(program.clone());
     if analyzer.diagnostics.has_errors() {
         analyzer.diagnostics.report();
@@ -97,7 +139,7 @@ fn main() {
         register_interpreter_intrinsics(&mut |name, val| {
             interpreter.env.insert(name, val);
         });
-        interpreter.load_stdlib();
+        interpreter.load_stdlib(&stdlib_path);
         interpreter.interpret(program);
         return;
     }
@@ -122,7 +164,7 @@ fn main() {
     } else {
         let mut cg = Codegen::new();
         cg.set_node_types(analyzer.node_types);
-        cg.load_stdlib();
+        cg.load_stdlib(&stdlib_path);
         cg.generate(program)
     };
 
@@ -136,7 +178,7 @@ fn main() {
 
     std::fs::write(&asm_file, asm).expect("Unable to write assembly file");
 
-    if let Err(e) = Driver::build(&asm_file, &binary_file) {
+    if let Err(e) = Driver::build(&asm_file, &binary_file, &runtime_path) {
         eprintln!("Build failed: {}", e);
         // Cleanup on failure
         let _ = std::fs::remove_file(&asm_file);

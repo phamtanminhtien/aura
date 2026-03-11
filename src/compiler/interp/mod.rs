@@ -174,8 +174,7 @@ impl Interpreter {
         }
     }
 
-    pub fn load_stdlib(&mut self) {
-        let stdlib_path = "stdlib/std";
+    pub fn load_stdlib(&mut self, stdlib_path: &str) {
         if let Ok(entries) = std::fs::read_dir(stdlib_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -217,7 +216,7 @@ impl Interpreter {
     fn resolve_type(&self, te: TypeExpr) -> Type {
         match te {
             TypeExpr::Name(n, _) => match n.as_str() {
-                "i32" | "Int32" => Type::Int32,
+                "i32" | "Int32" | "number" | "Number" => Type::Int32,
                 "i64" | "Int64" => Type::Int64,
                 "f32" | "Float32" => Type::Float32,
                 "f64" | "Float64" => Type::Float64,
@@ -242,6 +241,7 @@ impl Interpreter {
         match stmt {
             Statement::VarDeclaration {
                 name,
+                name_span: _,
                 ty: _,
                 value,
                 span: _,
@@ -253,6 +253,7 @@ impl Interpreter {
             }
             Statement::FunctionDeclaration {
                 name,
+                name_span: _,
                 params,
                 return_ty,
                 body,
@@ -273,6 +274,7 @@ impl Interpreter {
             }
             Statement::ClassDeclaration {
                 name,
+                name_span: _,
                 fields,
                 methods,
                 constructor,
@@ -543,7 +545,7 @@ impl Interpreter {
                 self.env.assign(&name, val.clone());
                 val
             }
-            Expr::Call(name, args, _) => {
+            Expr::Call(name, _, args, _) => {
                 let func = self.env.lookup(&name).expect("Function not found");
                 if let Value::Function {
                     name: _,
@@ -619,7 +621,7 @@ impl Interpreter {
                     panic!("Not a function");
                 }
             }
-            Expr::MethodCall(obj_expr, method, args, _) => {
+            Expr::MethodCall(obj_expr, method, _, args, _) => {
                 let obj = self.eval_expr(*obj_expr);
                 match obj {
                     Value::Instance(class_name, fields_ref) => {
@@ -798,7 +800,7 @@ impl Interpreter {
                 .env
                 .lookup("this")
                 .expect("Usage of this outside of class context"),
-            Expr::New(class_name, args, _) => {
+            Expr::New(class_name, _, args, _) => {
                 let (field_names, methods) = {
                     let (fnms, mths) = self
                         .classes
@@ -855,7 +857,7 @@ impl Interpreter {
                     instance
                 }
             }
-            Expr::MemberAccess(obj_expr, member, _) => {
+            Expr::MemberAccess(obj_expr, member, _, _) => {
                 let obj = self.eval_expr(*obj_expr);
                 match obj {
                     Value::Instance(_, fields) => fields
@@ -877,7 +879,7 @@ impl Interpreter {
                     _ => panic!("Not an instance or class for member access: {:?}", obj),
                 }
             }
-            Expr::MemberAssign(obj_expr, member, val_expr, _) => {
+            Expr::MemberAssign(obj_expr, member, val_expr, _, _) => {
                 let obj = self.eval_expr(*obj_expr);
                 let val = self.eval_expr(*val_expr);
                 match obj {
