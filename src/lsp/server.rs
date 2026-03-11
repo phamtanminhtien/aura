@@ -376,7 +376,6 @@ impl LanguageServer for Backend {
                     }
                 }
             }
-
             let mut seen = std::collections::HashSet::new();
             if let Some(program) = &state.program {
                 for stmt in &program.statements {
@@ -420,6 +419,58 @@ impl LanguageServer for Backend {
                         _ => {}
                     }
                 }
+            }
+
+            // 3. Keywords & Built-ins
+            let keywords = vec![
+                "let",
+                "if",
+                "else",
+                "while",
+                "function",
+                "return",
+                "class",
+                "constructor",
+                "new",
+                "static",
+                "this",
+                "is",
+                "import",
+                "export",
+                "from",
+                "as",
+                "async",
+                "await",
+                "try",
+                "catch",
+                "throw",
+                "finally",
+                "null",
+            ];
+
+            for kw in keywords {
+                if seen.insert(kw.to_string()) {
+                    items.push(CompletionItem {
+                        label: kw.to_string(),
+                        kind: Some(CompletionItemKind::KEYWORD),
+                        ..Default::default()
+                    });
+                }
+            }
+
+            // Built-in functions
+            if seen.insert("print".to_string()) {
+                items.push(CompletionItem {
+                    label: "print".to_string(),
+                    kind: Some(CompletionItemKind::FUNCTION),
+                    detail: Some("print(value: any)".to_string()),
+                    documentation: Some(Documentation::String(
+                        "Prints a value to the standard output.".to_string(),
+                    )),
+                    insert_text: Some("print($1)".to_string()),
+                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    ..Default::default()
+                });
             }
 
             return Ok(Some(CompletionResponse::Array(items)));
