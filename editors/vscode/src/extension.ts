@@ -1,6 +1,6 @@
 import * as path from "path";
 import * as fs from "fs";
-import { workspace, ExtensionContext } from "vscode";
+import { workspace, ExtensionContext, commands } from "vscode";
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -16,7 +16,7 @@ export function activate(context: ExtensionContext) {
 
   // For development, we assume the binary is in the workspace root or built via cargo
   // You might want to allow configuring this path in settings
-  let serverPath = workspace.getConfiguration("aura").get<string>("serverPath");
+  let serverPath = workspace.getConfiguration("aura").get<string>("serverPath") || workspace.getConfiguration("aura").get<string>("aura.serverPath");
 
   if (!serverPath || serverPath === "aura" || serverPath === "aura-dev") {
     // If not explicitly set to an absolute path, try to find it
@@ -84,6 +84,28 @@ export function activate(context: ExtensionContext) {
 
   // Start the client. This will also launch the server
   client.start();
+
+  const restartServer = async () => {
+    if (client) {
+      await client.stop();
+    }
+    client = new LanguageClient(
+      "auraLanguageServer",
+      "Aura Language Server",
+      serverOptions,
+      clientOptions
+    );
+    client.start();
+  };
+
+  context.subscriptions.push(
+    workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("aura.serverPath")) {
+        restartServer();
+      }
+    }),
+    commands.registerCommand("aura.restartServer", restartServer)
+  );
 }
 
 export function deactivate(): Thenable<void> | undefined {

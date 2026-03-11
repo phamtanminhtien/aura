@@ -30,6 +30,13 @@
         }
       }
     ],
+    "commands": [
+      {
+        "command": "aura.restartServer",
+        "title": "Restart Language Server",
+        "category": "Aura"
+      }
+    ],
     "grammars": [
       {
         "language": "aura",
