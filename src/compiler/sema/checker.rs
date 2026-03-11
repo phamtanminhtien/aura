@@ -25,6 +25,7 @@ pub enum SemanticErrorKind {
     DuplicateDeclaration(String),
     WrongArgumentCount(String, usize, usize), // name, expected, found
     NotAClass(String),
+    UndefinedFunction(String),
 }
 
 #[derive(Debug, Clone)]
@@ -150,6 +151,7 @@ impl SemanticAnalyzer {
                 )
             }
             SemanticErrorKind::NotAClass(t) => format!("Type {} is not a class", t),
+            SemanticErrorKind::UndefinedFunction(n) => format!("Undefined function: {}", n),
         };
         self.diagnostics
             .push(Diagnostic::error(msg, span.line, span.column));
@@ -891,7 +893,8 @@ impl SemanticAnalyzer {
                     }
                     *ret_ty
                 } else {
-                    Type::Int32 // Default for now
+                    self.error(SemanticErrorKind::UndefinedFunction(name), name_span);
+                    Type::Unknown
                 }
             }
             Expr::New(class_name, name_span, args, span) => {
