@@ -1,6 +1,6 @@
 import * as path from "path";
 import * as fs from "fs";
-import { workspace, ExtensionContext, commands } from "vscode";
+import { workspace, ExtensionContext, commands, window } from "vscode";
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -11,11 +11,72 @@ import {
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
+  // Create output channel for diagnostics
+  const outputChannel = window.createOutputChannel("Aura");
+  outputChannel.appendLine("Aura extension is activating...");
+
+  const restartServer = async () => {
+    outputChannel.appendLine("Restarting Aura Language Server...");
+    if (client) {
+      try {
+        await client.stop();
+      } catch (e) {
+        outputChannel.appendLine(`Error stopping client: ${e}`);
+      }
+    }
+    
+    // We need to re-evaluate the server path in case it changed
+    try {
+      const serverOptions = getServerOptions(outputChannel);
+      const clientOptions = getClientOptions();
+      client = new LanguageClient(
+        "auraLanguageServer",
+        "Aura Language Server",
+        serverOptions,
+        clientOptions
+      );
+      client.start();
+      outputChannel.appendLine("Aura Language Server started successfully.");
+    } catch (e) {
+      outputChannel.appendLine(`Failed to start Aura Language Server: ${e}`);
+    }
+  };
+
+  // Register the restart command immediately so it's available even if activation fails later
+  context.subscriptions.push(
+    commands.registerCommand("aura.restartServer", restartServer),
+    workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("aura.serverPath")) {
+        restartServer();
+      }
+    })
+  );
+
+  try {
+    const serverOptions = getServerOptions(outputChannel);
+    const clientOptions = getClientOptions();
+
+    // Create the language client and start the client.
+    client = new LanguageClient(
+      "auraLanguageServer",
+      "Aura Language Server",
+      serverOptions,
+      clientOptions
+    );
+
+    // Start the client. This will also launch the server
+    client.start();
+    outputChannel.appendLine("Aura Language Server activation complete.");
+  } catch (e) {
+    outputChannel.appendLine(`Error during Aura activation: ${e}`);
+  }
+}
+
+function getServerOptions(outputChannel: any): ServerOptions {
   // The server is implemented in rust
   // We launch it with the --lsp flag
 
   // For development, we assume the binary is in the workspace root or built via cargo
-  // You might want to allow configuring this path in settings
   let serverPath = workspace.getConfiguration("aura").get<string>("serverPath") || workspace.getConfiguration("aura").get<string>("aura.serverPath");
 
   if (!serverPath || serverPath === "aura" || serverPath === "aura-dev") {
@@ -48,6 +109,8 @@ export function activate(context: ExtensionContext) {
     }
   }
 
+  outputChannel.appendLine(`Using server path: ${serverPath}`);
+
   const run: Executable = {
     command: serverPath,
     args: ["--lsp"],
@@ -59,13 +122,14 @@ export function activate(context: ExtensionContext) {
     },
   };
 
-  const serverOptions: ServerOptions = {
+  return {
     run,
     debug: run,
   };
+}
 
-  // Options to control the language client
-  const clientOptions: LanguageClientOptions = {
+function getClientOptions(): LanguageClientOptions {
+  return {
     // Register the server for aura files
     documentSelector: [{ scheme: "file", language: "aura" }],
     synchronize: {
@@ -73,39 +137,6 @@ export function activate(context: ExtensionContext) {
       fileEvents: workspace.createFileSystemWatcher("**/*.aura"),
     },
   };
-
-  // Create the language client and start the client.
-  client = new LanguageClient(
-    "auraLanguageServer",
-    "Aura Language Server",
-    serverOptions,
-    clientOptions
-  );
-
-  // Start the client. This will also launch the server
-  client.start();
-
-  const restartServer = async () => {
-    if (client) {
-      await client.stop();
-    }
-    client = new LanguageClient(
-      "auraLanguageServer",
-      "Aura Language Server",
-      serverOptions,
-      clientOptions
-    );
-    client.start();
-  };
-
-  context.subscriptions.push(
-    workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("aura.serverPath")) {
-        restartServer();
-      }
-    }),
-    commands.registerCommand("aura.restartServer", restartServer)
-  );
 }
 
 export function deactivate(): Thenable<void> | undefined {
