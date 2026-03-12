@@ -1,5 +1,20 @@
 pub use crate::compiler::frontend::token::TplPart;
 
+#[derive(Debug, Clone)]
+pub enum DocComment {
+    Line(String),
+    Block(String),
+}
+
+impl DocComment {
+    pub fn content(&self) -> String {
+        match self {
+            DocComment::Line(s) | DocComment::Block(s) => s.clone(),
+        }
+    }
+}
+
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span {
     pub line: usize,
@@ -101,7 +116,7 @@ pub struct Field {
     pub value: Option<Expr>,
     pub is_static: bool,
     pub span: Span,
-    pub doc: Option<String>,
+    pub doc: Option<DocComment>,
 }
 
 #[derive(Debug, Clone)]
@@ -114,7 +129,7 @@ pub struct ClassMethod {
     pub is_static: bool,
     pub is_async: bool,
     pub span: Span,
-    pub doc: Option<String>,
+    pub doc: Option<DocComment>,
 }
 
 #[derive(Debug, Clone)]
@@ -132,7 +147,7 @@ pub enum Statement {
         value: Expr,
         is_const: bool,
         span: Span,
-        doc: Option<String>,
+        doc: Option<DocComment>,
     },
     FunctionDeclaration {
         name: String,
@@ -142,7 +157,7 @@ pub enum Statement {
         body: Box<Statement>,
         is_async: bool,
         span: Span,
-        doc: Option<String>,
+        doc: Option<DocComment>,
     },
     ClassDeclaration {
         name: String,
@@ -151,7 +166,7 @@ pub enum Statement {
         methods: Vec<ClassMethod>,
         constructor: Option<ClassMethod>,
         span: Span,
-        doc: Option<String>,
+        doc: Option<DocComment>,
     },
     Return(Expr, Span),
     Print(Expr, Span),
@@ -185,6 +200,8 @@ pub enum Statement {
         finally_block: Option<Box<Statement>>,
         span: Span,
     },
+    Comment(String, Span),
+    RegularBlockComment(String, Span),
     Error,
 }
 
@@ -203,6 +220,8 @@ impl Statement {
             Statement::Import { span, .. } => *span,
             Statement::Export { span, .. } => *span,
             Statement::TryCatch { span, .. } => *span,
+            Statement::Comment(_, s) => *s,
+            Statement::RegularBlockComment(_, s) => *s,
             Statement::Error => Span::new(0, 0),
         }
     }

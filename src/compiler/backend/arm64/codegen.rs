@@ -296,6 +296,7 @@ impl Codegen {
 
     fn generate_statement(&mut self, stmt: Statement) {
         match stmt {
+            Statement::Comment(_, _) | Statement::RegularBlockComment(_, _) => {}
             Statement::VarDeclaration {
                 name, ty: _, value, ..
             } => {

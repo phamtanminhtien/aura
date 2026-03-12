@@ -164,16 +164,22 @@ impl<'a> Lexer<'a> {
                         }
                         let content = &self.source[start_pos..self.pos];
                         Token::new(
-                            TokenKind::DocComment(content.to_string()),
+                            TokenKind::LineDoc(content.to_string()),
                             current_line,
                             current_column,
                         )
                     } else {
-                        // Regular comment: skip to end of line
+                        // Regular comment: collect to end of line
+                        let start_pos = self.pos;
                         while !self.is_at_end() && self.peek() != '\n' {
                             self.advance();
                         }
-                        self.next_token()
+                        let content = &self.source[start_pos..self.pos];
+                        Token::new(
+                            TokenKind::Comment(content.to_string()),
+                            current_line,
+                            current_column,
+                        )
                     }
                 } else if self.peek() == '*' {
                     self.advance();
@@ -205,19 +211,24 @@ impl<'a> Lexer<'a> {
                         }
                     }
 
+                    let content = if found_end {
+                        &self.source[start_pos..self.pos - 2]
+                    } else {
+                        &self.source[start_pos..self.pos]
+                    };
+
                     if is_doc {
-                        let content = if found_end {
-                            &self.source[start_pos..self.pos - 2]
-                        } else {
-                            &self.source[start_pos..self.pos]
-                        };
                         Token::new(
-                            TokenKind::DocComment(content.to_string()),
+                            TokenKind::BlockDoc(content.to_string()),
                             current_line,
                             current_column,
                         )
                     } else {
-                        self.next_token()
+                        Token::new(
+                            TokenKind::RegularBlockComment(content.to_string()),
+                            current_line,
+                            current_column,
+                        )
                     }
                 } else {
                     Token::new(TokenKind::Slash, current_line, current_column)

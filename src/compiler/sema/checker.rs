@@ -321,9 +321,9 @@ impl SemanticAnalyzer {
                     }
                     let ty = self.resolve_type(f.ty.clone());
                     if f.is_static {
-                        static_field_map.insert(f.name.clone(), (ty, f.name_span, f.doc.clone()));
+                        static_field_map.insert(f.name.clone(), (ty, f.name_span, f.doc.as_ref().map(|d| d.content())));
                     } else {
-                        field_map.insert(f.name.clone(), (ty, f.name_span, f.doc.clone()));
+                        field_map.insert(f.name.clone(), (ty, f.name_span, f.doc.as_ref().map(|d| d.content())));
                     }
                 }
                 let mut method_map = HashMap::new();
@@ -348,12 +348,12 @@ impl SemanticAnalyzer {
                     if m.is_static {
                         static_method_map.insert(
                             m.name.clone(),
-                            (param_tys, ret_ty, m.doc.clone(), m.name_span),
+                            (param_tys, ret_ty, m.doc.as_ref().map(|d| d.content()), m.name_span),
                         );
                     } else {
                         method_map.insert(
                             m.name.clone(),
-                            (param_tys, ret_ty, m.doc.clone(), m.name_span),
+                            (param_tys, ret_ty, m.doc.as_ref().map(|d| d.content()), m.name_span),
                         );
                     }
                 }
@@ -368,7 +368,7 @@ impl SemanticAnalyzer {
                         is_exported,
                         defined_in: self.current_file.clone(),
                         span: *span,
-                        doc: doc.clone(),
+                        doc: doc.as_ref().map(|d| d.content()),
                     },
                 );
             } else if let Statement::FunctionDeclaration {
@@ -401,7 +401,7 @@ impl SemanticAnalyzer {
                     is_exported,
                     *name_span,
                     self.current_file.clone(),
-                    doc.clone(),
+                    doc.as_ref().map(|d| d.content()),
                 );
             } else if let Statement::VarDeclaration {
                 name,
@@ -433,7 +433,7 @@ impl SemanticAnalyzer {
                     is_exported,
                     *name_span,
                     self.current_file.clone(),
-                    doc.clone(),
+                    doc.as_ref().map(|d| d.content()),
                 );
             } else if let Statement::Import {
                 path,
@@ -770,7 +770,7 @@ impl SemanticAnalyzer {
                 }
                 if self.record_node_info {
                     if let Some(d) = &doc {
-                        self.record_doc(name_span, d.clone());
+                        self.record_doc(name_span, d.content());
                     }
                     self.record_type(name_span, declared_ty.clone());
                 }
@@ -783,7 +783,7 @@ impl SemanticAnalyzer {
                     is_exported_flag,
                     span,
                     self.current_file.clone(),
-                    doc,
+                    doc.as_ref().map(|d| d.content()),
                 );
             }
             Statement::Expression(expr, _) => {
@@ -888,7 +888,6 @@ impl SemanticAnalyzer {
                     .map(|(_, ty)| self.resolve_type(ty.clone()))
                     .collect();
                 let ret_ty = self.resolve_type(return_ty);
-                let doc_clone = doc.clone();
 
                 // Register function before checking body for recursion
                 let func_ty = Type::Function(param_tys.clone(), Box::new(ret_ty.clone()));
@@ -901,11 +900,11 @@ impl SemanticAnalyzer {
                     is_exported_flag,
                     span,
                     self.current_file.clone(),
-                    doc_clone,
+                    doc.as_ref().map(|d| d.content()),
                 );
                 if self.record_node_info {
                     if let Some(d) = &doc {
-                        self.record_doc(name_span, d.clone());
+                        self.record_doc(name_span, d.content());
                     }
                     self.record_type(name_span, func_ty);
                 }
@@ -1057,6 +1056,7 @@ impl SemanticAnalyzer {
             Statement::Export { decl, .. } => {
                 self.check_statement(*decl);
             }
+            Statement::Comment(_, _) | Statement::RegularBlockComment(_, _) => {}
         }
     }
 

@@ -31,7 +31,10 @@ pub enum TokenKind {
     Identifier(String),
     StringLiteral(String),
     Number(i64),
-    DocComment(String),
+    LineDoc(String),
+    BlockDoc(String),
+    Comment(String),
+    RegularBlockComment(String),
     /// Template literal: `Hello, ${name}! You are ${age} years old.`
     /// Pre-parsed at lex time into alternating parts.
     TemplateLiteral(Vec<TplPart>),

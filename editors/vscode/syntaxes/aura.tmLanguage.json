@@ -25,6 +25,9 @@
       "include": "#numbers"
     },
     {
+      "include": "#constants"
+    },
+    {
       "include": "#types"
     },
     {
@@ -65,7 +68,11 @@
         },
         {
           "name": "keyword.declaration.aura",
-          "match": "\\b(class|let|const|constructor|interface|type|enum|abstract|override|static|readonly|protected|private)\\b"
+          "match": "\\b(class|constructor|interface|type|enum|abstract|override|static|readonly|protected|private)\\b"
+        },
+        {
+          "name": "storage.type.aura",
+          "match": "\\b(let|const|var)\\b"
         },
         {
           "name": "keyword.other.aura",
@@ -210,6 +217,14 @@
           "name": "entity.name.type.class.aura"
         }
       }
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "variable.other.constant.aura",
+          "match": "\\b[A-Z][A-Z0-9_]*\\b"
+        }
+      ]
     }
   }
 }

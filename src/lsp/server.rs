@@ -1,5 +1,6 @@
 use crate::compiler::ast::{Program, Span, Statement};
 use crate::compiler::frontend::error::Severity;
+use crate::compiler::frontend::formatter::Formatter;
 use crate::compiler::frontend::lexer::Lexer;
 use crate::compiler::frontend::parser::Parser;
 use crate::compiler::sema::checker::{ClassInfo, SemanticAnalyzer};
@@ -41,6 +42,7 @@ impl LanguageServer for Backend {
                     trigger_characters: Some(vec![".".to_string()]),
                     ..Default::default()
                 }),
+                document_formatting_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -467,7 +469,7 @@ impl LanguageServer for Backend {
                                     kind: Some(CompletionItemKind::FUNCTION),
                                     documentation: doc
                                         .as_ref()
-                                        .map(|d| Documentation::String(d.clone())),
+                                        .map(|d| Documentation::String(d.content())),
                                     ..Default::default()
                                 });
                             }
@@ -479,7 +481,7 @@ impl LanguageServer for Backend {
                                     kind: Some(CompletionItemKind::CLASS),
                                     documentation: doc
                                         .as_ref()
-                                        .map(|d| Documentation::String(d.clone())),
+                                        .map(|d| Documentation::String(d.content())),
                                     ..Default::default()
                                 });
                             }
@@ -491,7 +493,7 @@ impl LanguageServer for Backend {
                                     kind: Some(CompletionItemKind::VARIABLE),
                                     documentation: doc
                                         .as_ref()
-                                        .map(|d| Documentation::String(d.clone())),
+                                        .map(|d| Documentation::String(d.content())),
                                     ..Default::default()
                                 });
                             }
@@ -600,6 +602,32 @@ impl LanguageServer for Backend {
                         end: Position::new(def_span.line as u32 - 1, def_span.column as u32),
                     },
                 })));
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri;
+        let docs = self.documents.lock().unwrap();
+
+        if let Some(state) = docs.get(&uri) {
+            if let Some(program) = &state.program {
+                let formatter = Formatter::new();
+                let formatted = formatter.format_program(program);
+
+                let lines: Vec<&str> = state.source.lines().collect();
+                let last_line = lines.len() as u32;
+                let last_char = lines.last().map(|l| l.len()).unwrap_or(0) as u32;
+
+                return Ok(Some(vec![TextEdit {
+                    range: Range {
+                        start: Position::new(0, 0),
+                        end: Position::new(last_line, last_char),
+                    },
+                    new_text: formatted,
+                }]));
             }
         }
 

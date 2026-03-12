@@ -484,6 +484,7 @@ impl Lowerer {
             Statement::Import { .. } | Statement::Export { .. } => {
                 todo!("Imports/exports lowering to IR is not implemented yet")
             }
+            Statement::Comment(_, _) | Statement::RegularBlockComment(_, _) => {}
         }
     }
 

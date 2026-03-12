@@ -1,5 +1,5 @@
 use crate::compiler::ast::{
-    ClassMethod, Expr, Field, ImportItem, Program, Span, Statement, TemplatePart, TplPart, TypeExpr,
+    ClassMethod, DocComment, Expr, Field, ImportItem, Program, Span, Statement, TemplatePart, TplPart, TypeExpr,
 };
 use crate::compiler::frontend::error::{Diagnostic, DiagnosticList};
 use crate::compiler::frontend::token::{Token, TokenKind};
@@ -56,7 +56,7 @@ impl Parser {
             is_async = true;
         }
 
-        match self.peek().kind {
+        match &self.peek().kind {
             TokenKind::Let | TokenKind::Const => {
                 if is_async {
                     self.diagnostics.push(Diagnostic::error(
@@ -87,6 +87,16 @@ impl Parser {
             TokenKind::Export => self.parse_export_statement(doc),
             TokenKind::Try => self.parse_try_statement(),
             TokenKind::Throw => self.parse_throw_statement(),
+            TokenKind::Comment(content) => {
+                let content = content.clone();
+                self.advance();
+                Ok(Statement::Comment(content, s))
+            }
+            TokenKind::RegularBlockComment(content) => {
+                let content = content.clone();
+                self.advance();
+                Ok(Statement::RegularBlockComment(content, s))
+            }
             _ => {
                 let expr = self.parse_expression();
                 self.consume(TokenKind::Semicolon)?;
@@ -95,16 +105,22 @@ impl Parser {
         }
     }
 
-    fn parse_doc_comments(&mut self) -> Option<String> {
-        let mut docs = Vec::new();
-        while let TokenKind::DocComment(content) = self.peek().kind.clone() {
-            docs.push(content);
-            self.advance();
-        }
-        if docs.is_empty() {
-            None
-        } else {
-            Some(docs.join("\n"))
+    fn parse_doc_comments(&mut self) -> Option<DocComment> {
+        match self.peek().kind.clone() {
+            TokenKind::LineDoc(content) => {
+                let mut docs = vec![content];
+                self.advance();
+                while let TokenKind::LineDoc(content) = self.peek().kind.clone() {
+                    docs.push(content);
+                    self.advance();
+                }
+                Some(DocComment::Line(docs.join("\n")))
+            }
+            TokenKind::BlockDoc(content) => {
+                self.advance();
+                Some(DocComment::Block(content))
+            }
+            _ => None,
         }
     }
 
@@ -198,7 +214,7 @@ impl Parser {
         })
     }
 
-    fn parse_export_statement(&mut self, doc: Option<String>) -> Result<Statement, ()> {
+    fn parse_export_statement(&mut self, doc: Option<DocComment>) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Export)?;
 
@@ -310,7 +326,7 @@ impl Parser {
 
     fn parse_function_declaration(
         &mut self,
-        doc: Option<String>,
+        doc: Option<DocComment>,
         is_async: bool,
     ) -> Result<Statement, ()> {
         let s = self.span();
@@ -371,7 +387,7 @@ impl Parser {
         })
     }
 
-    fn parse_var_declaration(&mut self, doc: Option<String>) -> Result<Statement, ()> {
+    fn parse_var_declaration(&mut self, doc: Option<DocComment>) -> Result<Statement, ()> {
         let s = self.span();
         let is_const = if self.peek().kind == TokenKind::Const {
             self.advance();
@@ -504,7 +520,7 @@ impl Parser {
         })
     }
 
-    fn parse_class_declaration(&mut self, doc: Option<String>) -> Result<Statement, ()> {
+    fn parse_class_declaration(&mut self, doc: Option<DocComment>) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Class)?;
         let (name, name_span) = if let Token {

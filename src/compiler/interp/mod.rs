@@ -449,6 +449,7 @@ impl Interpreter {
                 res
             }
             Statement::Export { decl, .. } => self.execute_statement(*decl),
+            Statement::Comment(_, _) | Statement::RegularBlockComment(_, _) => StatementResult::None,
         }
     }
 
