@@ -57,7 +57,7 @@ impl Parser {
         }
 
         match self.peek().kind {
-            TokenKind::Let => {
+            TokenKind::Let | TokenKind::Const => {
                 if is_async {
                     self.diagnostics.push(Diagnostic::error(
                         "Async is not allowed on variable declarations".to_string(),
@@ -65,7 +65,7 @@ impl Parser {
                         s.column,
                     ));
                 }
-                self.parse_let_statement(doc)
+                self.parse_var_declaration(doc)
             }
             TokenKind::Print => {
                 if is_async {
@@ -203,7 +203,7 @@ impl Parser {
         self.consume(TokenKind::Export)?;
 
         let decl = match self.peek().kind {
-            TokenKind::Let => self.parse_let_statement(doc)?,
+            TokenKind::Let | TokenKind::Const => self.parse_var_declaration(doc)?,
             TokenKind::Function => {
                 let mut is_async = false;
                 if self.peek().kind == TokenKind::Async {
@@ -371,9 +371,16 @@ impl Parser {
         })
     }
 
-    fn parse_let_statement(&mut self, doc: Option<String>) -> Result<Statement, ()> {
+    fn parse_var_declaration(&mut self, doc: Option<String>) -> Result<Statement, ()> {
         let s = self.span();
-        self.consume(TokenKind::Let)?;
+        let is_const = if self.peek().kind == TokenKind::Const {
+            self.advance();
+            true
+        } else {
+            self.consume(TokenKind::Let)?;
+            false
+        };
+
         let (name, name_span) = if let Token {
             kind: TokenKind::Identifier(name),
             line,
@@ -384,8 +391,13 @@ impl Parser {
             (name, Span::new(line, column))
         } else {
             let token = self.peek();
+            let msg = if is_const {
+                "Expected variable name after const"
+            } else {
+                "Expected variable name after let"
+            };
             self.diagnostics.push(Diagnostic::error(
-                "Expected variable name after let".to_string(),
+                msg.to_string(),
                 token.line,
                 token.column,
             ));
@@ -408,6 +420,7 @@ impl Parser {
             name_span,
             ty,
             value,
+            is_const,
             span: s,
             doc,
         })

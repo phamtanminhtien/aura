@@ -280,6 +280,7 @@ impl Interpreter {
                 name_span: _,
                 ty: _,
                 value,
+                is_const: _,
                 span: _,
                 doc: _,
             } => {

@@ -26,6 +26,7 @@ pub enum SemanticErrorKind {
     WrongArgumentCount(String, usize, usize), // name, expected, found
     NotAClass(String),
     UndefinedFunction(String),
+    CannotAssignToConstant(String),
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +131,7 @@ impl SemanticAnalyzer {
             "true".to_string(),
             Type::Boolean,
             false,
+            true, // true is a constant
             Span::new(0, 0),
             "".to_string(),
             None,
@@ -138,6 +140,7 @@ impl SemanticAnalyzer {
             "false".to_string(),
             Type::Boolean,
             false,
+            true, // false is a constant
             Span::new(0, 0),
             "".to_string(),
             None,
@@ -146,6 +149,7 @@ impl SemanticAnalyzer {
             "null".to_string(),
             Type::Null,
             false,
+            true, // null is a constant
             Span::new(0, 0),
             "".to_string(),
             None,
@@ -155,6 +159,7 @@ impl SemanticAnalyzer {
             "O_RDONLY".to_string(),
             Type::Int32,
             false,
+            true,
             Span::new(0, 0),
             "".to_string(),
             None,
@@ -163,6 +168,7 @@ impl SemanticAnalyzer {
             "O_WRONLY".to_string(),
             Type::Int32,
             false,
+            true,
             Span::new(0, 0),
             "".to_string(),
             None,
@@ -171,6 +177,7 @@ impl SemanticAnalyzer {
             "O_RDWR".to_string(),
             Type::Int32,
             false,
+            true,
             Span::new(0, 0),
             "".to_string(),
             None,
@@ -179,6 +186,7 @@ impl SemanticAnalyzer {
             "O_CREAT".to_string(),
             Type::Int32,
             false,
+            true,
             Span::new(0, 0),
             "".to_string(),
             None,
@@ -187,6 +195,7 @@ impl SemanticAnalyzer {
             "O_TRUNC".to_string(),
             Type::Int32,
             false,
+            true,
             Span::new(0, 0),
             "".to_string(),
             None,
@@ -195,6 +204,7 @@ impl SemanticAnalyzer {
             "O_APPEND".to_string(),
             Type::Int32,
             false,
+            true,
             Span::new(0, 0),
             "".to_string(),
             None,
@@ -228,6 +238,9 @@ impl SemanticAnalyzer {
             }
             SemanticErrorKind::NotAClass(t) => format!("Type {} is not a class", t),
             SemanticErrorKind::UndefinedFunction(n) => format!("Undefined function: {}", n),
+            SemanticErrorKind::CannotAssignToConstant(n) => {
+                format!("Cannot assign to constant: {}", n)
+            }
         };
         self.diagnostics
             .push(Diagnostic::error(msg, span.line, span.column));
@@ -361,6 +374,7 @@ impl SemanticAnalyzer {
                     name.clone(),
                     Type::Function(param_tys, Box::new(ret_ty)),
                     false,
+                    true, // function declarations are constant
                     *name_span,
                     self.current_file.clone(),
                     doc.clone(),
@@ -370,6 +384,7 @@ impl SemanticAnalyzer {
                 name_span,
                 ty,
                 value: _,
+                is_const,
                 span: _,
                 doc,
             } = actual_stmt
@@ -390,6 +405,7 @@ impl SemanticAnalyzer {
                     name.clone(),
                     var_ty,
                     false,
+                    *is_const,
                     *name_span,
                     self.current_file.clone(),
                     doc.clone(),
@@ -671,6 +687,7 @@ impl SemanticAnalyzer {
                 name_span,
                 ty,
                 value,
+                is_const,
                 span,
                 doc,
             } => {
@@ -705,6 +722,7 @@ impl SemanticAnalyzer {
                     name,
                     declared_ty,
                     false,
+                    is_const,
                     span,
                     self.current_file.clone(),
                     doc,
@@ -740,6 +758,7 @@ impl SemanticAnalyzer {
                             name.clone(),
                             narrowed_ty.clone(),
                             false,
+                            false,
                             span,
                             self.current_file.clone(),
                             None,
@@ -759,6 +778,7 @@ impl SemanticAnalyzer {
                             self.scope.insert(
                                 name.clone(),
                                 excluded_ty,
+                                false,
                                 false,
                                 span,
                                 self.current_file.clone(),
@@ -816,6 +836,7 @@ impl SemanticAnalyzer {
                     name.clone(),
                     func_ty.clone(),
                     false,
+                    true, // functions are constant
                     span,
                     self.current_file.clone(),
                     doc_clone,
@@ -831,7 +852,7 @@ impl SemanticAnalyzer {
                 for (pname, pty) in params {
                     let ty = self.resolve_type(pty.clone());
                     self.scope
-                        .insert(pname, ty, true, pty.span(), self.current_file.clone(), None);
+                        .insert(pname, ty, true, false, pty.span(), self.current_file.clone(), None);
                 }
                 self.check_statement(*body);
                 self.pop_scope();
@@ -866,20 +887,22 @@ impl SemanticAnalyzer {
 
                 if let Some(ctor) = constructor {
                     self.push_scope();
-                    self.scope.insert(
-                        "this".to_string(),
-                        Type::Class(name.clone()),
-                        false,
-                        ctor.span,
-                        self.current_file.clone(),
-                        None,
-                    );
+                        self.scope.insert(
+                            "this".to_string(),
+                            Type::Class(name.clone()),
+                            false,
+                            true, // this is constant
+                            ctor.span,
+                            self.current_file.clone(),
+                            None,
+                        );
                     for (pname, pty) in ctor.params {
                         let ty = self.resolve_type(pty.clone());
                         self.scope.insert(
                             pname,
                             ty,
                             true,
+                            false,
                             pty.span(),
                             self.current_file.clone(),
                             None,
@@ -895,6 +918,7 @@ impl SemanticAnalyzer {
                         "this".to_string(),
                         Type::Class(name.clone()),
                         false,
+                        true, // this is constant
                         m.span,
                         self.current_file.clone(),
                         None,
@@ -905,6 +929,7 @@ impl SemanticAnalyzer {
                             pname,
                             ty,
                             true,
+                            false,
                             pty.span(),
                             self.current_file.clone(),
                             None,
@@ -947,6 +972,7 @@ impl SemanticAnalyzer {
                             name.clone(),
                             final_ty,
                             true,
+                            false,
                             Span::new(0, 0),
                             self.current_file.clone(),
                             None,
@@ -1101,8 +1127,16 @@ impl SemanticAnalyzer {
             }
             Expr::Assign(name, value, span) => {
                 let val_ty = self.check_expr(*value);
-                if let Some(sym) = self.scope.lookup(&name) {
-                    let expected_ty = sym.ty.clone();
+                let (sym_is_const, sym_ty) = if let Some(sym) = self.scope.lookup(&name) {
+                    (sym.is_const, Some(sym.ty.clone()))
+                } else {
+                    (false, None)
+                };
+
+                if let Some(expected_ty) = sym_ty {
+                    if sym_is_const {
+                        self.error(SemanticErrorKind::CannotAssignToConstant(name.clone()), span);
+                    }
                     if !self.is_assignable(&val_ty, &expected_ty) {
                         self.error(
                             SemanticErrorKind::TypeMismatch(

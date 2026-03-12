@@ -389,6 +389,7 @@ impl<'a> Lexer<'a> {
         let literal = &self.source[start_pos..self.pos];
         let kind = match literal {
             "let" => TokenKind::Let,
+            "const" => TokenKind::Const,
             "print" => TokenKind::Print,
             "if" => TokenKind::If,
             "else" => TokenKind::Else,

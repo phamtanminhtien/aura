@@ -337,6 +337,7 @@ impl Lowerer {
                 name_span: _,
                 ty,
                 value,
+                is_const: _,
                 span: _,
                 doc: _,
             } => {

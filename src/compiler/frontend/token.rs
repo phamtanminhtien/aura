@@ -2,6 +2,7 @@
 pub enum TokenKind {
     // Keywords
     Let,
+    Const,
     Print,
     If,
     Else,

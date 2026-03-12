@@ -130,6 +130,7 @@ pub enum Statement {
         name_span: Span,
         ty: Option<TypeExpr>,
         value: Expr,
+        is_const: bool,
         span: Span,
         doc: Option<String>,
     },
