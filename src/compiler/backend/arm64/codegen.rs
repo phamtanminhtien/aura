@@ -321,6 +321,7 @@ impl Codegen {
                                     | "charAt"
                                     | "substring"
                                     | "join"
+                                    | "read"
                             ) {
                                 var_ty = Type::String;
                             }
@@ -485,6 +486,7 @@ impl Codegen {
                                     | "trim"
                                     | "toString"
                                     | "join"
+                                    | "read"
                             ) {
                                 is_str = true;
                             }
@@ -1052,6 +1054,19 @@ impl Codegen {
                         if methods.contains(&member) {
                             method_label = format!("_{}_{}", class_name, member);
                             break;
+                        }
+                    }
+                    
+                    if method_label.starts_with("_METHOD_") {
+                        if matches!(
+                            member.as_str(),
+                            "charAt" | "substring" | "indexOf" | "toUpper" | "toLower" | "trim"
+                        ) {
+                            method_label = format!("_aura_string_{}", member);
+                        } else if matches!(member.as_str(), "push" | "pop" | "join" | "get") {
+                            method_label = format!("_aura_array_{}", member);
+                        } else if member == "len" {
+                            method_label = format!("_aura_string_{}", member);
                         }
                     }
                 }

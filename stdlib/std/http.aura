@@ -250,7 +250,7 @@ export class HTTPServer {
     /**
      * Starts listening for requests and handles them using the provided handler function.
      */
-    listen(handler: function): void {
+    listen(handler: function(HTTPRequest): HTTPResponse): void {
         if (this.server == null) {
             print("Failed to start server");
             return;
