@@ -5,6 +5,7 @@ use crate::compiler::frontend::lexer::Lexer;
 use crate::compiler::frontend::parser::Parser;
 use crate::compiler::sema::checker::{ClassInfo, SemanticAnalyzer};
 use crate::compiler::sema::ty::Type;
+use crate::compiler::intrinsic::register_analyzer_intrinsics;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
@@ -412,6 +413,7 @@ impl LanguageServer for Backend {
                             if let Some(parent) = file_path.parent() {
                                 analyzer.set_current_dir(parent.to_string_lossy().to_string());
                             }
+                            register_analyzer_intrinsics(&mut analyzer);
                             analyzer.load_stdlib(&self.stdlib_path);
 
                             if let Ok(abs_p) = analyzer.resolve_import_path(&path) {
@@ -427,6 +429,7 @@ impl LanguageServer for Backend {
                                         target_analyzer
                                             .set_current_dir(parent.to_string_lossy().to_string());
                                     }
+                                    register_analyzer_intrinsics(&mut target_analyzer);
                                     target_analyzer.load_stdlib(&self.stdlib_path);
                                     target_analyzer.analyze(program);
 
@@ -762,6 +765,7 @@ impl Backend {
         let program = parser.parse_program();
 
         let mut analyzer = SemanticAnalyzer::new();
+        register_analyzer_intrinsics(&mut analyzer);
         analyzer.load_stdlib(&self.stdlib_path);
         analyzer.analyze(program.clone());
 
