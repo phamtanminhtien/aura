@@ -2,6 +2,20 @@
 
 ### 🚀 Features
 
+- Implement version flag (`-v`, `--version`) to display the program version.
+- Add `aura fmt` command and update Aura syntax for method declarations and print statements.
+
+### 🐛 Bug Fixes
+
+- Multi-line block comment formatting with normalized indentation and add a corresponding test.
+
+### 🚜 Refactor
+
+- Simplify target selection to exclusively support aarch64-apple-darwin by removing other platform-specific code.
+## [0.2.5] - 2026-03-13
+
+### 🚀 Features
+
 - Add scripts for installing and uninstalling the Aura application.
 - Embed C runtime code directly into the binary and update build drivers to compile it from an in-memory string.
 
@@ -12,6 +26,8 @@
 ### ⚙️ Miscellaneous Tasks
 
 - Remove legacy raw binary asset creation from the release workflow.
+- Update changelog
+- Release aura version 0.2.5
 ## [0.2.4] - 2026-03-13
 
 ### 🚀 Features
