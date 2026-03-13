@@ -57,82 +57,90 @@ fn run_test(aura_file: &Path) {
     let binary =
         std::env::var("CARGO_BIN_EXE_aura").unwrap_or_else(|_| "target/debug/aura".to_string());
 
-    let mode = std::env::var("AURA_TEST_MODE").unwrap_or_else(|_| "interp".to_string());
+    let modes_env = std::env::var("AURA_TEST_MODE").unwrap_or_else(|_| "interp".to_string());
+    let modes: Vec<&str> = if modes_env.is_empty() {
+        vec!["interp"]
+    } else {
+        modes_env.split(',').map(|s| s.trim()).collect()
+    };
 
-    let mut cmd = Command::new(&binary);
-    match mode.as_str() {
-        "interp" => {
-            cmd.arg("--interp");
+    for mode in modes {
+        let mut cmd = Command::new(&binary);
+        match mode {
+            "interp" => {
+                cmd.arg("--interp");
+            }
+            "compiler" => {
+                // No extra flags for basic compiler
+            }
+            "ir" => {
+                cmd.arg("--ir");
+            }
+            _ => panic!("Unknown AURA_TEST_MODE: {}", mode),
         }
-        "compiler" => {
-            // No extra flags for basic compiler
+        cmd.arg(aura_file);
+
+        let output = cmd
+            .output()
+            .unwrap_or_else(|e| panic!("Failed to run binary '{}' for mode '{}': {}", binary, mode, e));
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        if !output.status.success() {
+            panic!(
+                "Aura program {:?} exited with non-zero status in mode {}.\nstdout:\n{}\nstderr:\n{}",
+                aura_file, mode, stdout, stderr
+            );
         }
-        "ir" => {
-            cmd.arg("--ir");
+
+        // Normalise: trim trailing whitespace from each line, remove trailing
+        // blank lines.
+        let actual: Vec<String> = stdout
+            .lines()
+            // Strip the banner lines that main.rs emits
+            .filter(|l| {
+                !l.starts_with("Interpreting:")
+                    && !l.starts_with("Compiling:")
+                    && !l.starts_with("--- Starting")
+                    && !l.starts_with("--- Running")
+                    && !l.starts_with("Assembling")
+                    && !l.starts_with("Compiling runtime")
+                    && !l.starts_with("Linking")
+                    && !l.starts_with("Building runtime")
+            })
+            .map(|l| l.trim_end().to_string())
+            .collect();
+
+        // Remove trailing empties both sides for comparison stability
+        let mut actual_trimmed = actual.clone();
+        while actual_trimmed
+            .last()
+            .map(|l: &String| l.is_empty())
+            .unwrap_or(false)
+        {
+            actual_trimmed.pop();
         }
-        _ => panic!("Unknown AURA_TEST_MODE: {}", mode),
-    }
-    cmd.arg(aura_file);
+        let mut exp_trimmed = expected.clone();
+        while exp_trimmed
+            .last()
+            .map(|l: &String| l.is_empty())
+            .unwrap_or(false)
+        {
+            exp_trimmed.pop();
+        }
 
-    let output = cmd
-        .output()
-        .unwrap_or_else(|e| panic!("Failed to run binary '{}': {}", binary, e));
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    if !output.status.success() {
-        panic!(
-            "Aura program {:?} exited with non-zero status.\nstdout:\n{}\nstderr:\n{}",
-            aura_file, stdout, stderr
+        assert_eq!(
+            exp_trimmed,
+            actual_trimmed,
+            "Output mismatch for {:?}\nMode: {}\nExpected:\n{}\nActual:\n{}",
+            aura_file,
+            mode,
+            exp_trimmed.join("\n"),
+            actual_trimmed.join("\n")
         );
     }
 
-    // Normalise: trim trailing whitespace from each line, remove trailing
-    // blank lines.
-    let actual: Vec<String> = stdout
-        .lines()
-        // Strip the banner lines that main.rs emits
-        .filter(|l| {
-            !l.starts_with("Interpreting:")
-                && !l.starts_with("Compiling:")
-                && !l.starts_with("--- Starting")
-                && !l.starts_with("--- Running")
-                && !l.starts_with("Assembling")
-                && !l.starts_with("Compiling runtime")
-                && !l.starts_with("Linking")
-                && !l.starts_with("Building runtime")
-        })
-        .map(|l| l.trim_end().to_string())
-        .collect();
-
-    // Remove trailing empties both sides for comparison stability
-    let mut actual_trimmed = actual.clone();
-    while actual_trimmed
-        .last()
-        .map(|l: &String| l.is_empty())
-        .unwrap_or(false)
-    {
-        actual_trimmed.pop();
-    }
-    let mut exp_trimmed = expected.clone();
-    while exp_trimmed
-        .last()
-        .map(|l: &String| l.is_empty())
-        .unwrap_or(false)
-    {
-        exp_trimmed.pop();
-    }
-
-    assert_eq!(
-        exp_trimmed,
-        actual_trimmed,
-        "Output mismatch for {:?}\nMode: {}\nExpected:\n{}\nActual:\n{}",
-        aura_file,
-        mode,
-        exp_trimmed.join("\n"),
-        actual_trimmed.join("\n")
-    );
 }
 
 // ───────────────────────────────────────── test cases ─────────────────────────
