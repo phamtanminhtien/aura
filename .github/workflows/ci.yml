@@ -11,6 +11,7 @@ jobs:
     strategy:
       matrix:
         test_mode: [interp, compiler]
+        os: [macos-latest, ubuntu-latest]
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
