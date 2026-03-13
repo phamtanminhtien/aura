@@ -1,3 +1,4 @@
+use aura::compiler::frontend::formatter::Formatter;
 use aura::compiler::frontend::lexer::Lexer;
 use aura::compiler::frontend::parser::Parser;
 use aura::compiler::interp::Interpreter;
@@ -18,6 +19,7 @@ fn print_help() {
     println!("  build      Compile the source file into a binary");
     println!("  run        Compile and execute the source file (default)");
     println!("  lsp        Start the Language Server Protocol (LSP) server");
+    println!("  fmt        Format .aura files");
     println!("  help       Show this help message");
     println!("");
     println!("Options:");
@@ -56,6 +58,7 @@ fn main() {
     let mut use_interp = false;
     let mut emit_ir = false;
     let mut is_lsp = false;
+    let mut is_fmt = false;
     let mut target = get_default_target();
 
     let mut skip_next = false;
@@ -71,6 +74,10 @@ fn main() {
             "lsp" if i == 1 => {
                 command = "lsp";
                 is_lsp = true;
+            }
+            "fmt" if i == 1 => {
+                command = "fmt";
+                is_fmt = true;
             }
             "help" if i == 1 => print_help(),
             "--ir" => use_ir = true,
@@ -125,6 +132,14 @@ fn main() {
     if is_lsp {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
         rt.block_on(aura::lsp::server::run_server(stdlib_path));
+        return;
+    }
+
+    if is_fmt {
+        let path = input_path
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| ".".to_string());
+        handle_fmt_command(&path);
         return;
     }
 
@@ -258,5 +273,81 @@ fn main() {
         let _ = std::fs::remove_file(&binary_file);
     } else {
         println!("Build successful: {}", binary_file);
+    }
+}
+
+fn handle_fmt_command(path_str: &str) {
+    let path = std::path::Path::new(path_str);
+    if path.is_file() {
+        if path.extension().and_then(|s| s.to_str()) == Some("aura") {
+            format_file(path);
+        }
+    } else if path.is_dir() {
+        format_dir(path);
+    } else if !path.exists() {
+        eprintln!("Error: Path '{}' not found", path_str);
+        std::process::exit(1);
+    }
+}
+
+fn format_dir(dir: &std::path::Path) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("Error reading directory '{}': {}", dir.display(), e);
+            return;
+        }
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            format_dir(&path);
+        } else if path.extension().and_then(|s| s.to_str()) == Some("aura") {
+            format_file(&path);
+        }
+    }
+}
+
+fn format_file(path: &std::path::Path) {
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error reading file '{}': {}", path.display(), e);
+            return;
+        }
+    };
+
+    let mut lexer = Lexer::new(&content);
+    let tokens = lexer.lex_all();
+    if lexer.diagnostics.has_errors() {
+        eprintln!(
+            "Error: Syntax errors in '{}', skipping formatting",
+            path.display()
+        );
+        lexer.diagnostics.report();
+        return;
+    }
+
+    let mut parser = Parser::new(tokens, path.to_string_lossy().to_string());
+    let program = parser.parse_program();
+    if parser.diagnostics.has_errors() {
+        eprintln!(
+            "Error: Parsing errors in '{}', skipping formatting",
+            path.display()
+        );
+        parser.diagnostics.report();
+        return;
+    }
+
+    let formatter = Formatter::new().with_source(content.clone());
+    let formatted = formatter.format_program(&program);
+
+    if formatted != content {
+        if let Err(e) = std::fs::write(path, formatted) {
+            eprintln!("Error writing formatted file '{}': {}", path.display(), e);
+        } else {
+            println!("Formatted: {}", path.display());
+        }
     }
 }
