@@ -3,8 +3,8 @@
 // Aura rocks!
 
 function slogan(): string {
-    return "Aura rocks!";
+  return "Aura rocks!";
 }
 
 let s = slogan();
-print(s);
+print s;

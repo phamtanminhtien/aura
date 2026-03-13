@@ -5,13 +5,13 @@ import { HTTPServer, HTTPResponse, HTTPRequest } from "std/http.aura";
 // Since it's a while(true) loop, we can't easily test it in E2E automated suite
 // without backgrounding support in Aura, so we'll just test the initialization.
 
-print("HTTP Server test");
+print "HTTP Server test";
 
 let server = new HTTPServer(45678);
 if (server.server != null) {
-    print("Server initialized on 45678");
+  print "Server initialized on 45678";
 } else {
-    print("Failed to initialize server");
+  print "Failed to initialize server";
 }
 
 // Example usage:

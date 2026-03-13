@@ -2,23 +2,23 @@
  * Mathematical utilities for Aura.
  */
 export class Math {
-    /**
-     * Returns the absolute value of an integer.
-     */
-    static function abs(n: Int32) : Int32 {
-        if (n < 0) {
-            return 0 - n;
-        }
-        return n;
+  /**
+   * Returns the absolute value of an integer.
+   */
+  static abs(n: Int32): Int32 {
+    if (n < 0) {
+      return 0 - n;
     }
+    return n;
+  }
 
-    /**
-     * Returns the maximum of two integers.
-     */
-    static function max(a: Int32, b: Int32) : Int32 {
-        if (a > b) {
-            return a;
-        }
-        return b;
+  /**
+   * Returns the maximum of two integers.
+   */
+  static max(a: Int32, b: Int32): Int32 {
+    if (a > b) {
+      return a;
     }
+    return b;
+  }
 }

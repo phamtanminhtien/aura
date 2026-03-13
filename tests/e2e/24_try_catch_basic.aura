@@ -4,17 +4,17 @@
 // Error
 // In finally
 
-function main() {
-    try {
-        print("In try");
-        throw new Error("Error");
-        print("Should not be here");
-    } catch (e) {
-        print("Caught:");
-        print(e);
-    } finally {
-        print("In finally");
-    }
+function main(): void {
+  try {
+    print "In try";
+    throw new Error("Error");
+    print "Should not be here";
+  } catch (e: Error) {
+    print "Caught:";
+    print e;
+  } finally {
+    print "In finally";
+  }
 }
 
 main();

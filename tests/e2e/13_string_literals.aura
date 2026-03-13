@@ -4,7 +4,7 @@
 // Hello, Aura!
 
 let lang = "Aura";
-print(lang);
+print lang;
 
 let greeting = "Hello, Aura!";
-print(greeting);
+print greeting;

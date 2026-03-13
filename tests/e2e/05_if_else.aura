@@ -5,14 +5,14 @@
 // Small
 
 function classify(count: i32): i32 {
-    if (count > 10) {
-        print("Large");
-    } else if (count > 0) {
-        print("Medium");
-    } else {
-        print("Small");
-    }
-    return 0;
+  if (count > 10) {
+    print "Large";
+  } else   if (count > 0) {
+    print "Medium";
+  } else {
+    print "Small";
+  }
+  return 0;
 }
 
 classify(20);

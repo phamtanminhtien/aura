@@ -6,15 +6,15 @@
 // User alice is 30 years old.
 
 let name = "Aura";
-print(`Hello, ${name}!`);
+print `Hello, ${name}!`;
 
 let a = 1;
 let b = 2;
-print(`${a} + ${b} = ${a + b}`);
+print `${a} + ${b} = ${a + b}`;
 
 let flag = 1 == 1;
-print(`Flag is ${flag}`);
+print `Flag is ${flag}`;
 
 let user = "alice";
 let age = 30;
-print(`User ${user} is ${age} years old.`);
+print `User ${user} is ${age} years old.`;

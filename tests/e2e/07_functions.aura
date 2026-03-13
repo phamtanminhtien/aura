@@ -4,12 +4,12 @@
 // 100
 
 function add(a: i32, b: i32): i32 {
-    return a + b;
+  return a + b;
 }
 
 function multiply(a: i32, b: i32): i32 {
-    return a * b;
+  return a * b;
 }
 
-print(add(7, 8));
-print(multiply(10, 10));
+print add(7, 8);
+print multiply(10, 10);

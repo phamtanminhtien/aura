@@ -3,50 +3,44 @@
 import { Date } from "std/date";
 
 function test_date_basics(): i32 {
-    let d = new Date(1710000000000);
-
-    if (d.getFullYear() != 2024) {
-        print(`Year mismatch: ${d.getFullYear()}`);
-        return 1;
-    }
-    
-    // 1710000000000 is 2024-03-09T16:00:00Z
-    // Month is 0-indexed, so March is 2
-    if (d.getMonth() != 2) {
-        print(`Month mismatch: ${d.getMonth()}`);
-        return 1;
-    }
-    
-    if (d.getDate() != 9) {
-        print(`Date mismatch: ${d.getDate()}`);
-        return 1;
-    }
-    
-    return 0;
+  let d = new Date(1710000000000);
+  if (d.getFullYear() != 2024) {
+    print `Year mismatch: ${d.getFullYear()}`;
+    return 1;
+  }
+  // 1710000000000 is 2024-03-09T16:00:00Z
+  // Month is 0-indexed, so March is 2
+  if (d.getMonth() != 2) {
+    print `Month mismatch: ${d.getMonth()}`;
+    return 1;
+  }
+  if (d.getDate() != 9) {
+    print `Date mismatch: ${d.getDate()}`;
+    return 1;
+  }
+  return 0;
 }
 
 function test_date_parse(): i32 {
-    let d = new Date("2024-03-10T13:00:00Z");
-    if (d.getFullYear() != 2024) return 1;
-    if (d.getMonth() != 2) return 1;
-    if (d.getDate() != 10) return 1;
-    if (d.getHours() != 13) return 1;
-    return 0;
+  let d = new Date("2024-03-10T13:00:00Z");
+  if (d.getFullYear() != 2024)   return 1;
+  if (d.getMonth() != 2)   return 1;
+  if (d.getDate() != 10)   return 1;
+  if (d.getHours() != 13)   return 1;
+  return 0;
 }
 
 function main(): i32 {
-    if (test_date_basics() != 0) {
-        print("test_date_basics failed");
-        return 1;
-    }
-    
-    if (test_date_parse() != 0) {
-        print("test_date_parse failed");
-        return 1;
-    }
-    
-    print("Date tests passed");
-    return 0;
+  if (test_date_basics() != 0) {
+    print "test_date_basics failed";
+    return 1;
+  }
+  if (test_date_parse() != 0) {
+    print "test_date_parse failed";
+    return 1;
+  }
+  print "Date tests passed";
+  return 0;
 }
 
 main();

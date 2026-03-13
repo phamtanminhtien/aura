@@ -6,23 +6,23 @@
 // <Promise: resolved to Array([Int(1), Int(2)])>
 
 async function fetchData(url: string): Promise<i32> {
-    print("Fetching from " + url);
-    return 42;
+  print "Fetching from " + url;
+  return 42;
 }
 
 class Api {
-    async get(path: string): Promise<i32> {
-        let result = await fetchData("https://api.example.com" + path);
-        return result;
-    }
+  async get(path: string): Promise<i32> {
+    let result = await fetchData("https://api.example.com" + path);
+    return result;
+  }
 }
 
 let api = new Api();
 let data = await api.get("/users");
-print(data);
+print data;
 
 let p1 = 1;
 let p2 = 2;
 let all = await Promise.all([p1, p2]);
-print("All result:");
-print(all);
+print "All result:";
+print all;

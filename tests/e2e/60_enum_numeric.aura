@@ -10,42 +10,52 @@
 // false
 
 enum Direction {
-    Up = 1,
-    Down
+  Up = 1,
+  Down,
 }
 
 enum Status {
-    Ok = 10,
-    Err,
-    Pending
+  Ok = 10,
+  Err,
+  Pending,
 }
 
 let u: Direction = Direction.Up;
 let d: Direction = Direction.Down;
 
-print(u); // 1
-print(d); // 2
+print u;
+
+// 1
+print d;
+
+// 2
 
 let ok: Status = Status.Ok;
 let err: Status = Status.Err;
 let p: Status = Status.Pending;
 
-print(ok); // 10
-print(err); // 11
-print(p); // 12
+print ok;
+
+// 10
+print err;
+
+// 11
+print p;
+
+// 12
 
 // Test equality
 if (u == Direction.Up) {
-    print(1);
+  print 1;
 } else {
-    print(0);
+  print 0;
 }
 
 if (u == Direction.Down) {
-    print(1);
+  print 1;
 } else {
-    print(0);
+  print 0;
 }
 
-print(u == Direction.Up);
-print(u == Direction.Down);
+print u == Direction.Up;
+print u == Direction.Down;

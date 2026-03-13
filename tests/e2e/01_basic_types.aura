@@ -4,7 +4,7 @@
 // hello
 
 let n: i32 = 42;
-print(n);
+print n;
 
 let s: string = "hello";
-print(s);
+print s;

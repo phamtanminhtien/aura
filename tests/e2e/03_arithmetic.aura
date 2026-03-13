@@ -9,8 +9,8 @@
 let a: i32 = 10;
 let b: i32 = 5;
 
-print(a + b);
-print(a - b);
-print(a * b);
-print(a / b);
-print(a % b + 1);
+print a + b;
+print a - b;
+print a * b;
+print a / b;
+print a % b + 1;

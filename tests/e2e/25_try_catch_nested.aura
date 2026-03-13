@@ -6,24 +6,24 @@
 // Caught in outer:
 // Fail
 
-function fail() {
-    print("In fail");
-    throw new Error("Fail");
+function fail(): void {
+  print "In fail";
+  throw new Error("Fail");
 }
 
-function outer() {
+function outer(): void {
+  try {
+    print "Outer try";
     try {
-        print("Outer try");
-        try {
-            print("Inner try");
-            fail();
-        } finally {
-            print("Inner finally");
-        }
-    } catch (e) {
-        print("Caught in outer:");
-        print(e);
+      print "Inner try";
+      fail();
+    } finally {
+      print "Inner finally";
     }
+  } catch (e: Error) {
+    print "Caught in outer:";
+    print e;
+  }
 }
 
 outer();

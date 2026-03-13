@@ -4,16 +4,16 @@
 // hello world
 
 class MathUtil {
-    static function add(a: i32, b: i32): i32 {
-        return a + b;
-    }
+  static add(a: i32, b: i32): i32 {
+    return a + b;
+  }
 }
 
 class Greet {
-    static function hello(name: string): string {
-        return "hello world";
-    }
+  static hello(name: string): string {
+    return "hello world";
+  }
 }
 
-print(MathUtil.add(20, 22));
-print(Greet.hello("aura"));
+print MathUtil.add(20, 22);
+print Greet.hello("aura");
