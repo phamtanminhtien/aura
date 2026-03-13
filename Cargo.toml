@@ -2,6 +2,9 @@
 name = "aura"
 version = "0.1.0"
 edition = "2021"
+description = "Aura programming language toolchain (compiler, interpreter, LSP)"
+license = "MIT"
+readme = "README.md"
 
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
