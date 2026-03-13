@@ -10,7 +10,8 @@ jobs:
 
     strategy:
       matrix:
-        test_mode: [interp, compiler]
+        # ubuntu-latest
+        os: [macos-latest]
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
@@ -30,7 +31,8 @@ jobs:
       - name: lint
         run: cargo clippy -- -A warnings
 
-      - name: test
-        env:
-          AURA_TEST_MODE: ${{ matrix.test_mode }}
-        run: cargo test
+      - name: lib tests
+        run: cargo test --lib
+
+      - name: e2e tests
+        run: cargo test --test e2e -- interp compiler

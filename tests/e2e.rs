@@ -40,7 +40,7 @@ fn parse_expected(source: &str) -> Vec<String> {
 }
 
 /// Run a single `.aura` file with the selected mode and compare output.
-fn run_test(aura_file: &Path) {
+fn run_test(aura_file: &Path, mode_override: Option<&str>) {
     let source = std::fs::read_to_string(aura_file)
         .unwrap_or_else(|e| panic!("Cannot read {:?}: {}", aura_file, e));
 
@@ -57,95 +57,129 @@ fn run_test(aura_file: &Path) {
     let binary =
         std::env::var("CARGO_BIN_EXE_aura").unwrap_or_else(|_| "target/debug/aura".to_string());
 
-    let mode = std::env::var("AURA_TEST_MODE").unwrap_or_else(|_| "interp".to_string());
+    let args: Vec<String> = std::env::args().collect();
+    let modes_env = std::env::var("AURA_TEST_MODE").unwrap_or_default();
 
-    let mut cmd = Command::new(&binary);
-    match mode.as_str() {
-        "interp" => {
-            cmd.arg("--interp");
+    // Check for modes in command-line arguments (after --)
+    let modes_arg = args
+        .iter()
+        .find(|arg| arg.contains("interp") || arg.contains("compiler") || arg.contains("ir"));
+
+    let modes: Vec<&str> = if let Some(m) = mode_override {
+        vec![m]
+    } else if let Some(arg) = modes_arg {
+        arg.split(',').map(|s| s.trim()).collect()
+    } else if !modes_env.is_empty() {
+        modes_env.split(',').map(|s| s.trim()).collect()
+    } else {
+        vec!["interp"]
+    };
+
+    for mode in modes {
+        let mut cmd = Command::new(&binary);
+        match mode {
+            "interp" => {
+                cmd.arg("--interp");
+            }
+            "compiler" => {
+                // No extra flags for basic compiler
+            }
+            "ir" => {
+                cmd.arg("--ir");
+            }
+            _ => panic!("Unknown AURA_TEST_MODE: {}", mode),
         }
-        "compiler" => {
-            // No extra flags for basic compiler
+        cmd.arg(aura_file);
+
+        let output = cmd.output().unwrap_or_else(|e| {
+            panic!(
+                "Failed to run binary '{}' for mode '{}': {}",
+                binary, mode, e
+            )
+        });
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        if !output.status.success() {
+            panic!(
+                "Aura program {:?} exited with non-zero status in mode {}.\nstdout:\n{}\nstderr:\n{}",
+                aura_file, mode, stdout, stderr
+            );
         }
-        "ir" => {
-            cmd.arg("--ir");
+
+        // Normalise: trim trailing whitespace from each line, remove trailing
+        // blank lines.
+        let actual: Vec<String> = stdout
+            .lines()
+            // Strip the banner lines that main.rs emits
+            .filter(|l| {
+                !l.starts_with("Interpreting:")
+                    && !l.starts_with("Compiling:")
+                    && !l.starts_with("--- Starting")
+                    && !l.starts_with("--- Running")
+                    && !l.starts_with("Assembling")
+                    && !l.starts_with("Compiling runtime")
+                    && !l.starts_with("Linking")
+                    && !l.starts_with("Building runtime")
+            })
+            .map(|l| l.trim_end().to_string())
+            .collect();
+
+        // Remove trailing empties both sides for comparison stability
+        let mut actual_trimmed = actual.clone();
+        while actual_trimmed
+            .last()
+            .map(|l: &String| l.is_empty())
+            .unwrap_or(false)
+        {
+            actual_trimmed.pop();
         }
-        _ => panic!("Unknown AURA_TEST_MODE: {}", mode),
-    }
-    cmd.arg(aura_file);
+        let mut exp_trimmed = expected.clone();
+        while exp_trimmed
+            .last()
+            .map(|l: &String| l.is_empty())
+            .unwrap_or(false)
+        {
+            exp_trimmed.pop();
+        }
 
-    let output = cmd
-        .output()
-        .unwrap_or_else(|e| panic!("Failed to run binary '{}': {}", binary, e));
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    if !output.status.success() {
-        panic!(
-            "Aura program {:?} exited with non-zero status.\nstdout:\n{}\nstderr:\n{}",
-            aura_file, stdout, stderr
+        assert_eq!(
+            exp_trimmed,
+            actual_trimmed,
+            "Output mismatch for {:?}\nMode: {}\nExpected:\n{}\nActual:\n{}",
+            aura_file,
+            mode,
+            exp_trimmed.join("\n"),
+            actual_trimmed.join("\n")
         );
     }
-
-    // Normalise: trim trailing whitespace from each line, remove trailing
-    // blank lines.
-    let actual: Vec<String> = stdout
-        .lines()
-        // Strip the banner lines that main.rs emits
-        .filter(|l| {
-            !l.starts_with("Interpreting:")
-                && !l.starts_with("Compiling:")
-                && !l.starts_with("--- Starting")
-                && !l.starts_with("--- Running")
-                && !l.starts_with("Assembling")
-                && !l.starts_with("Compiling runtime")
-                && !l.starts_with("Linking")
-                && !l.starts_with("Building runtime")
-        })
-        .map(|l| l.trim_end().to_string())
-        .collect();
-
-    // Remove trailing empties both sides for comparison stability
-    let mut actual_trimmed = actual.clone();
-    while actual_trimmed
-        .last()
-        .map(|l: &String| l.is_empty())
-        .unwrap_or(false)
-    {
-        actual_trimmed.pop();
-    }
-    let mut exp_trimmed = expected.clone();
-    while exp_trimmed
-        .last()
-        .map(|l: &String| l.is_empty())
-        .unwrap_or(false)
-    {
-        exp_trimmed.pop();
-    }
-
-    assert_eq!(
-        exp_trimmed,
-        actual_trimmed,
-        "Output mismatch for {:?}\nMode: {}\nExpected:\n{}\nActual:\n{}",
-        aura_file,
-        mode,
-        exp_trimmed.join("\n"),
-        actual_trimmed.join("\n")
-    );
 }
 
 // ───────────────────────────────────────── test cases ─────────────────────────
 
 macro_rules! e2e_test {
     ($test_name:ident, $file:literal) => {
-        #[test]
-        fn $test_name() {
-            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("tests")
-                .join("e2e")
-                .join($file);
-            run_test(&path);
+        mod $test_name {
+            use super::*;
+
+            #[test]
+            fn interp() {
+                let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests")
+                    .join("e2e")
+                    .join($file);
+                run_test(&path, Some("interp"));
+            }
+
+            #[test]
+            fn compiler() {
+                let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests")
+                    .join("e2e")
+                    .join($file);
+                run_test(&path, Some("compiler"));
+            }
         }
     };
 }
