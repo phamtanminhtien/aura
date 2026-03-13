@@ -22,7 +22,7 @@ fi
 echo "Generating changelog with git-cliff..."
 git cliff --output CHANGELOG.md
 
-if ! git diff --quiet -- CHANGELOG.md; then
+if git status --porcelain -- CHANGELOG.md | grep -q .; then
   echo "Committing changelog..."
   git add CHANGELOG.md
   git commit -m "chore: update changelog"
