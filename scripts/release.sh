@@ -31,7 +31,7 @@ else
 fi
 
 echo "Running cargo release (${LEVEL})..."
-cargo release "${LEVEL}"
+cargo release "${LEVEL}" --execute
 
 echo "Release complete."
 
