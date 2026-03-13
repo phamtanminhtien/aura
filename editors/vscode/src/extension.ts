@@ -8,6 +8,8 @@ import {
   Executable,
 } from "vscode-languageclient/node";
 
+import * as os from "os";
+
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
@@ -24,7 +26,7 @@ export function activate(context: ExtensionContext) {
         outputChannel.appendLine(`Error stopping client: ${e}`);
       }
     }
-    
+
     // We need to re-evaluate the server path in case it changed
     try {
       const serverOptions = getServerOptions(outputChannel);
@@ -33,7 +35,7 @@ export function activate(context: ExtensionContext) {
         "auraLanguageServer",
         "Aura Language Server",
         serverOptions,
-        clientOptions
+        clientOptions,
       );
       client.start();
       outputChannel.appendLine("Aura Language Server started successfully.");
@@ -49,7 +51,7 @@ export function activate(context: ExtensionContext) {
       if (e.affectsConfiguration("aura.serverPath")) {
         restartServer();
       }
-    })
+    }),
   );
 
   try {
@@ -61,7 +63,7 @@ export function activate(context: ExtensionContext) {
       "auraLanguageServer",
       "Aura Language Server",
       serverOptions,
-      clientOptions
+      clientOptions,
     );
 
     // Start the client. This will also launch the server
@@ -72,44 +74,68 @@ export function activate(context: ExtensionContext) {
   }
 }
 
+function resolveAuraPath(outputChannel: any): string {
+  // 1. Check user configuration
+  let serverPath =
+    workspace.getConfiguration("aura").get<string>("serverPath") ||
+    workspace.getConfiguration("aura").get<string>("aura.serverPath");
+
+  if (serverPath && serverPath.trim() !== "") {
+    if (path.isAbsolute(serverPath)) {
+      if (fs.existsSync(serverPath)) {
+        outputChannel.appendLine(
+          `Using configured absolute path: ${serverPath}`,
+        );
+        return serverPath;
+      }
+    } else {
+      // If it's a relative path or just a command name, we'll try to find it
+      outputChannel.appendLine(`Configuration found: ${serverPath}`);
+    }
+  } else {
+    serverPath = "aura";
+  }
+
+  // 2. Check if it's in the PATH (handled by child_process eventually, but we check here for logging)
+  // We don't use 'which' here to avoid external dependencies, but Executable will handle it.
+  // However, we can try to find it in common locations explicitly.
+
+  const homeDir = os.homedir();
+  const commonPaths = [
+    serverPath, // Try the raw command (rely on PATH)
+    path.join(homeDir, ".aura", "bin", "aura"), // Standard install
+    path.join(homeDir, ".cargo", "bin", "aura"), // Alternative cargo install
+  ];
+
+  // Add project-specific path if workspace is open
+  const workspaceFolders = workspace.workspaceFolders;
+  if (workspaceFolders && workspaceFolders.length > 0) {
+    const rootPath = workspaceFolders[0].uri.fsPath;
+    commonPaths.push(path.join(rootPath, "target", "debug", "aura"));
+    commonPaths.push(path.join(rootPath, "aura"));
+  }
+
+  for (const p of commonPaths) {
+    try {
+      if (p === serverPath) continue; // Skip the raw command for now
+      if (fs.existsSync(p)) {
+        outputChannel.appendLine(`Found Aura binary at: ${p}`);
+        return p;
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+
+  outputChannel.appendLine(`Defaulting to command: ${serverPath}`);
+  return serverPath;
+}
+
 function getServerOptions(outputChannel: any): ServerOptions {
   // The server is implemented in rust
   // We launch it with the --lsp flag
 
-  // For development, we assume the binary is in the workspace root or built via cargo
-  let serverPath = workspace.getConfiguration("aura").get<string>("serverPath") || workspace.getConfiguration("aura").get<string>("aura.serverPath");
-
-  if (!serverPath || serverPath === "aura" || serverPath === "aura-dev") {
-    // If not explicitly set to an absolute path, try to find it
-    const workspaceFolder = workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (workspaceFolder) {
-      // 1. Try target/debug/aura in current workspace
-      const localPath = path.join(workspaceFolder, "target", "debug", "aura");
-      if (fs.existsSync(localPath)) {
-        serverPath = localPath;
-      } else {
-        // 2. Try sibling aura-rust/target/debug/aura (common for projects sibling to the compiler)
-        const siblingPath = path.join(
-          workspaceFolder,
-          "..",
-          "aura-rust",
-          "target",
-          "debug",
-          "aura"
-        );
-        if (fs.existsSync(siblingPath)) {
-          serverPath = siblingPath;
-        } else {
-          // Fallback to "aura" in PATH
-          serverPath = "aura";
-        }
-      }
-    } else {
-      serverPath = "aura";
-    }
-  }
-
-  outputChannel.appendLine(`Using server path: ${serverPath}`);
+  const serverPath = resolveAuraPath(outputChannel);
 
   const run: Executable = {
     command: serverPath,

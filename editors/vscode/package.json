@@ -55,7 +55,7 @@
         "aura.serverPath": {
           "type": "string",
           "default": "aura",
-          "description": "Path to the Aura language server binary. If not specified, the extension will attempt to find it in the PATH or target/debug/aura."
+          "description": "Path to the Aura language server binary. Defaults to 'aura' (system PATH) if not specified."
         }
       }
     }
