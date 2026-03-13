@@ -16,6 +16,12 @@ export function activate(context: ExtensionContext) {
   // Create output channel for diagnostics
   const outputChannel = window.createOutputChannel("Aura");
   outputChannel.appendLine("Aura extension is activating...");
+  outputChannel.appendLine(`Activation context: ${JSON.stringify({
+    extensionPath: context.extensionPath,
+    storagePath: context.storagePath,
+    globalStoragePath: context.globalStoragePath,
+    logPath: context.logUri?.fsPath
+  })}`);
 
   const restartServer = async () => {
     outputChannel.appendLine("Restarting Aura Language Server...");
@@ -55,8 +61,12 @@ export function activate(context: ExtensionContext) {
   );
 
   try {
+    outputChannel.appendLine("Starting server-related logic...");
     const serverOptions = getServerOptions(outputChannel);
     const clientOptions = getClientOptions();
+
+    const serverPath = (serverOptions as any).run?.command || (serverOptions as any).command || "unknown";
+    outputChannel.appendLine(`Server path resolved to: ${serverPath}`);
 
     // Create the language client and start the client.
     client = new LanguageClient(
@@ -67,10 +77,14 @@ export function activate(context: ExtensionContext) {
     );
 
     // Start the client. This will also launch the server
+    outputChannel.appendLine("Starting Language Client...");
     client.start();
     outputChannel.appendLine("Aura Language Server activation complete.");
   } catch (e) {
-    outputChannel.appendLine(`Error during Aura activation: ${e}`);
+    outputChannel.appendLine(`CRITICAL ERROR during Aura activation: ${e}`);
+    if (e instanceof Error) {
+        outputChannel.appendLine(`Stack trace: ${e.stack}`);
+    }
   }
 }
 
