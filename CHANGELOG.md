@@ -2,10 +2,17 @@
 
 ### ⚙️ Miscellaneous Tasks
 
+- Update GitHub Actions workflow to add write permissions for contents
+## [0.2.2] - 2026-03-13
+
+### ⚙️ Miscellaneous Tasks
+
 - Refactor CI workflow to build and release binaries, add release script for changelog generation
 - Improve release script to check for cargo-release availability and conditionally commit changelog
 - Update changelog generation logic in release script to use git status for changes
 - Update release script to execute cargo release command
+- Update changelog
+- Release aura version 0.2.2
 ## [0.2.1] - 2026-03-13
 
 ### 🚀 Features
