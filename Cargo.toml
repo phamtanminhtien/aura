@@ -1,3 +1,8 @@
+[package.metadata.release]
+tag-name = "v{{version}}"
+push = true
+publish = true
+
 [package]
 name = "aura"
 version = "0.1.0"
