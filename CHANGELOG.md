@@ -2,6 +2,22 @@
 
 ### 🚀 Features
 
+- Implement esbuild for extension bundling and enhance activation logging with detailed context and error information.
+- Register intrinsic functions with the semantic analyzer in LSP handlers for opened and changed documents.
+- Implement network host resolution and update `print` statement syntax.
+
+### 🚜 Refactor
+
+- Standardize `print` statement syntax, class method declarations, and add explicit return types across e2e tests and stdlib.
+- Update print statement syntax to remove parentheses.
+
+### ⚙️ Miscellaneous Tasks
+
+- Add path filtering to the pull request CI workflow trigger.
+## [0.2.6] - 2026-03-13
+
+### 🚀 Features
+
 - Implement version flag (`-v`, `--version`) to display the program version.
 - Add `aura fmt` command and update Aura syntax for method declarations and print statements.
 
@@ -12,6 +28,11 @@
 ### 🚜 Refactor
 
 - Simplify target selection to exclusively support aarch64-apple-darwin by removing other platform-specific code.
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog
+- Release aura version 0.2.6
 ## [0.2.5] - 2026-03-13
 
 ### 🚀 Features
