@@ -20,6 +20,7 @@ pub struct ClassInfo {
 pub enum SemanticErrorKind {
     UndefinedVariable(String),
     UndefinedClass(String),
+    UndefinedEnum(String),
     UndefinedMethod(String, String),
     UndefinedField(String, String),
     TypeMismatch(String, String), // expected, found
@@ -232,11 +233,12 @@ impl SemanticAnalyzer {
         let msg = match &kind {
             SemanticErrorKind::UndefinedVariable(n) => format!("Undefined variable: {}", n),
             SemanticErrorKind::UndefinedClass(n) => format!("Undefined class: {}", n),
+            SemanticErrorKind::UndefinedEnum(n) => format!("Undefined enum: {}", n),
             SemanticErrorKind::UndefinedMethod(c, m) => {
                 format!("Method {} not found in class {}", m, c)
             }
             SemanticErrorKind::UndefinedField(c, f) => {
-                format!("Field {} not found in class {}", f, c)
+                format!("Field {} not found in type {}", f, c)
             }
             SemanticErrorKind::TypeMismatch(e, f) => {
                 format!("Type mismatch: expected {}, found {}", e, f)
@@ -434,6 +436,24 @@ impl SemanticAnalyzer {
                     *name_span,
                     self.current_file.clone(),
                     doc.as_ref().map(|d| d.content()),
+                );
+            } else if let Statement::Enum(decl) = actual_stmt {
+                if self.classes.contains_key(&decl.name) || self.scope.lookup_local(&decl.name).is_some() {
+                    self.error(
+                        SemanticErrorKind::DuplicateDeclaration(decl.name.clone()),
+                        decl.name_span,
+                    );
+                }
+                
+                self.scope.insert(
+                    decl.name.clone(),
+                    Type::Enum(decl.name.clone()),
+                    false,
+                    true,
+                    is_exported,
+                    decl.name_span,
+                    self.current_file.clone(),
+                    decl.doc.as_ref().map(|d| d.content()),
                 );
             } else if let Statement::Import {
                 path,
@@ -640,7 +660,14 @@ impl SemanticAnalyzer {
                 "boolean" | "Boolean" => Type::Boolean,
                 "void" | "Void" => Type::Void,
                 "any" => Type::Unknown,
-                _ => Type::Class(n),
+                _ => {
+                    if let Some(sym) = self.scope.lookup(&n) {
+                        if let Type::Enum(_) = sym.ty {
+                            return sym.ty.clone();
+                        }
+                    }
+                    Type::Class(n)
+                }
             },
             TypeExpr::Union(tys, _) => {
                 Type::Union(tys.into_iter().map(|t| self.resolve_type(t)).collect())
@@ -738,6 +765,85 @@ impl SemanticAnalyzer {
 
     fn check_statement(&mut self, stmt: Statement) {
         match stmt {
+            Statement::Enum(decl) => {
+                let mut first_ty: Option<Type> = None;
+
+                for member in &decl.members {
+                    let member_ty = if let Some(ref expr) = member.value {
+                        let ty = self.check_expr(expr.clone());
+                        if !matches!(ty, Type::Int64 | Type::Int32 | Type::String) {
+                            self.error(
+                                SemanticErrorKind::TypeMismatch(
+                                    "Int or String".to_string(),
+                                    format!("{:?}", ty),
+                                ),
+                                member.name_span,
+                            );
+                        }
+
+                        ty
+                    } else {
+                        // Implicit value
+                        if let Some(Type::String) = first_ty {
+                            self.error(
+                                SemanticErrorKind::TypeMismatch(
+                                    "Explicit String value required for all members".to_string(),
+                                    "Implicit Enum value".to_string(),
+                                ),
+                                member.name_span,
+                            );
+                        }
+                        // It's implicitly an integer
+                        Type::Int64
+                    };
+
+                    if let Some(ref first) = first_ty {
+                        // Check if all members have the same primitive type base
+                        let base_first = if matches!(first, Type::Int64 | Type::Int32) { Type::Int64 } else { first.clone() };
+                        let base_current = if matches!(member_ty, Type::Int64 | Type::Int32) { Type::Int64 } else { member_ty.clone() };
+
+                        if base_first != base_current && base_current != Type::Unknown {
+                            self.error(
+                                SemanticErrorKind::TypeMismatch(
+                                    format!("{:?}", first),
+                                    format!("{:?}", member_ty),
+                                ),
+                                member.name_span,
+                            );
+                        }
+                    } else {
+                        first_ty = Some(member_ty.clone());
+                    }
+
+                    // Register enum member as a constant
+                    // E.g., `Direction.Up` will be registered as `Direction.Up` in the scope
+                    let fqn = format!("{}.{}", decl.name, member.name);
+                    let is_exported = self.scope.lookup_local(&decl.name).map(|s| s.is_exported).unwrap_or(false);
+                    self.scope.insert(
+                        fqn,
+                        Type::Enum(decl.name.clone()),
+                        false,
+                        true, // Enum members are constant
+                        is_exported,
+                        member.name_span,
+                        self.current_file.clone(),
+                        None,
+                    );
+                }
+
+                // Register the Enum type itself
+                let is_exported = self.scope.lookup_local(&decl.name).map(|s| s.is_exported).unwrap_or(false);
+                self.scope.insert(
+                    decl.name.clone(),
+                    Type::Enum(decl.name.clone()),
+                    false,
+                    true, // Enum itself is a constant symbol
+                    is_exported,
+                    decl.name_span,
+                    self.current_file.clone(),
+                    decl.doc.as_ref().map(|d| d.content()),
+                );
+            }
             Statement::VarDeclaration {
                 name,
                 name_span,
@@ -1297,8 +1403,9 @@ impl SemanticAnalyzer {
             }
             Expr::MemberAccess(obj, field, name_span, span) => {
                 let obj_ty = self.check_expr(*obj);
-                if let Type::Class(class_name) = obj_ty {
-                    if let Some(class_info) = self.classes.get(&class_name) {
+
+                if let Type::Class(ref class_name) | Type::Enum(ref class_name) = obj_ty {
+                    if let Some(class_info) = self.classes.get(class_name) {
                         let field_info = class_info
                             .fields
                             .get(&field)
@@ -1320,14 +1427,74 @@ impl SemanticAnalyzer {
                             }
                             field_ty
                         } else {
+                            if matches!(obj_ty, Type::Enum(_)) {
+                                // For enums, members are registered directly in the scope as Name.Member
+                                let fqn = format!("{}.{}", class_name, field);
+                                if let Some(sym) = self.scope.lookup(&fqn) {
+                                    if self.record_node_info {
+                                        let sym_ty = sym.ty.clone();
+                                        let sym_doc = sym.doc.clone();
+                                        let sym_defined_in = sym.defined_in.clone();
+                                        let sym_span = sym.span;
+
+                                        if let Some(d) = sym_doc {
+                                            self.record_doc(name_span, d);
+                                        }
+                                        self.record_definition(
+                                            name_span,
+                                            sym_defined_in,
+                                            sym_span,
+                                        );
+                                        self.record_type(name_span, sym_ty.clone());
+                                        self.record_type(span, sym_ty.clone());
+                                        return sym_ty;
+                                    }
+                                    return sym.ty.clone();
+                                }
+                                self.error(
+                                    SemanticErrorKind::UndefinedField(class_name.clone(), field),
+                                    name_span,
+                                );
+                                return Type::Unknown;
+                            }
                             self.error(
-                                SemanticErrorKind::UndefinedField(class_name, field),
+                                SemanticErrorKind::UndefinedField(class_name.clone(), field),
                                 name_span,
                             );
                             Type::Unknown
                         }
                     } else {
-                        self.error(SemanticErrorKind::UndefinedClass(class_name), span);
+                        if matches!(obj_ty, Type::Enum(_)) {
+                            // Enum itself is just a namespace for its members
+                            let fqn = format!("{}.{}", class_name, field);
+                            if let Some(sym) = self.scope.lookup(&fqn) {
+                                if self.record_node_info {
+                                    let sym_ty = sym.ty.clone();
+                                    let sym_doc = sym.doc.clone();
+                                    let sym_defined_in = sym.defined_in.clone();
+                                    let sym_span = sym.span;
+
+                                    if let Some(d) = sym_doc {
+                                        self.record_doc(name_span, d);
+                                    }
+                                    self.record_definition(
+                                        name_span,
+                                        sym_defined_in,
+                                        sym_span,
+                                    );
+                                    self.record_type(name_span, sym_ty.clone());
+                                    self.record_type(span, sym_ty.clone());
+                                    return sym_ty;
+                                }
+                                return sym.ty.clone();
+                            }
+                            self.error(
+                                SemanticErrorKind::UndefinedField(class_name.clone(), field),
+                                name_span,
+                            );
+                        } else {
+                            self.error(SemanticErrorKind::UndefinedClass(class_name.clone()), span);
+                        }
                         Type::Unknown
                     }
                 } else {

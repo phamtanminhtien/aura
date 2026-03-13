@@ -332,6 +332,7 @@ impl Lowerer {
 
     fn lower_statement(&mut self, stmt: Statement) {
         match stmt {
+            Statement::Enum(_) => {} // Enums are lowered into constants (in the environment/checker), IR doesn't need to do anything here except maybe register constants, but we'll do that in SEMA.
             Statement::VarDeclaration {
                 name,
                 name_span: _,

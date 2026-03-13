@@ -83,6 +83,7 @@ impl Parser {
             TokenKind::Function => self.parse_function_declaration(doc, is_async),
             TokenKind::Return => self.parse_return_statement(),
             TokenKind::Class => self.parse_class_declaration(doc),
+            TokenKind::Enum => self.parse_enum_declaration(doc),
             TokenKind::Import => self.parse_import_statement(),
             TokenKind::Export => self.parse_export_statement(doc),
             TokenKind::Try => self.parse_try_statement(),
@@ -229,6 +230,7 @@ impl Parser {
                 self.parse_function_declaration(doc, is_async)?
             }
             TokenKind::Class => self.parse_class_declaration(doc)?,
+            TokenKind::Enum => self.parse_enum_declaration(doc)?,
             _ => {
                 if !self.panic_mode {
                     let token = self.peek();
@@ -754,6 +756,79 @@ impl Parser {
             span: s,
             doc,
         })
+    }
+
+    fn parse_enum_declaration(&mut self, doc: Option<DocComment>) -> Result<Statement, ()> {
+        let s = self.span();
+        self.consume(TokenKind::Enum)?;
+        let (name, name_span) = if let Token {
+            kind: TokenKind::Identifier(name),
+            line,
+            column,
+        } = self.peek().clone()
+        {
+            self.advance();
+            (name, Span::new(line, column))
+        } else {
+            if !self.panic_mode {
+                let token = self.peek();
+                self.diagnostics.push(Diagnostic::error(
+                    "Expected enum name after enum keyword".to_string(),
+                    token.line,
+                    token.column,
+                ));
+                self.panic_mode = true;
+            }
+            return Err(());
+        };
+
+        self.consume(TokenKind::OpenBrace)?;
+        let mut members = Vec::new();
+
+        while self.peek().kind != TokenKind::CloseBrace && !self.is_at_end() {
+            if let TokenKind::Identifier(mname) = self.peek().kind.clone() {
+                let name_span = self.span();
+                self.advance();
+
+                let value = if self.peek().kind == TokenKind::Equal {
+                    self.advance();
+                    Some(self.parse_expression())
+                } else {
+                    None
+                };
+
+                members.push(crate::compiler::ast::EnumMember {
+                    name: mname,
+                    name_span,
+                    value,
+                });
+
+                if self.peek().kind == TokenKind::Comma {
+                    self.advance();
+                }
+            } else {
+                if !self.panic_mode {
+                    let token = self.peek();
+                    self.diagnostics.push(Diagnostic::error(
+                        format!("Unexpected token in enum body: {:?}", token.kind),
+                        token.line,
+                        token.column,
+                    ));
+                    self.panic_mode = true;
+                }
+                self.advance();
+                self.synchronize();
+            }
+        }
+        self.consume(TokenKind::CloseBrace)?;
+
+        Ok(Statement::Enum(crate::compiler::ast::EnumDecl {
+            name,
+            name_span,
+            members,
+            span: s,
+            doc,
+        }))
     }
 
     fn parse_expression(&mut self) -> Expr {

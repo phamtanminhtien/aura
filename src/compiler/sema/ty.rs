@@ -14,6 +14,7 @@ pub enum Type {
     Null,
     Union(Vec<Type>),
     Generic(String, Vec<Type>),
+    Enum(String),
     Array(Box<Type>),
     Object(HashMap<String, Type>),
     Unknown,
@@ -105,6 +106,7 @@ impl std::fmt::Display for Type {
             Type::Boolean => write!(f, "boolean"),
             Type::Void => write!(f, "void"),
             Type::Class(name) => write!(f, "{}", name),
+            Type::Enum(name) => write!(f, "enum {}", name),
             Type::Function(params, ret) => {
                 write!(f, "function(")?;
                 for (i, p) in params.iter().enumerate() {

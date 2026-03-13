@@ -30,6 +30,26 @@ impl Formatter {
 
     fn format_statement_internal(&mut self, stmt: &Statement, include_doc: bool) {
         match stmt {
+            Statement::Enum(decl) => {
+                self.format_doc(&decl.doc);
+                self.indent();
+                self.result.push_str("enum ");
+                self.result.push_str(&decl.name);
+                self.result.push_str(" {\n");
+                self.indent_level += 1;
+                for member in &decl.members {
+                    self.indent();
+                    self.result.push_str(&member.name);
+                    if let Some(val) = &member.value {
+                        self.result.push_str(" = ");
+                        self.format_expr(val);
+                    }
+                    self.result.push_str(",\n");
+                }
+                self.indent_level -= 1;
+                self.indent();
+                self.result.push('}');
+            }
             Statement::VarDeclaration {
                 name,
                 ty,
@@ -256,6 +276,7 @@ impl Formatter {
                     Statement::VarDeclaration { doc, .. } => doc,
                     Statement::FunctionDeclaration { doc, .. } => doc,
                     Statement::ClassDeclaration { doc, .. } => doc,
+                    Statement::Enum(d) => &d.doc,
                     _ => &None,
                 };
 
@@ -633,6 +654,28 @@ export let x = 1;
         let formatted = formatter.format_program(&program);
 
         let expected = "/**\n * X is a variable\n */\nexport let x = 1;\n";
+        assert_eq!(formatted, expected);
+    }
+
+    #[test]
+    fn test_enum_formatter() {
+        let source = r#"
+enum Direction {
+  Up = 1,
+  Down
+}
+
+enum Status { Ok = "ok", Err = "err" }
+"#;
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.lex_all();
+        let mut parser = Parser::new(tokens, "test.aura".to_string());
+        let program = parser.parse_program();
+
+        let formatter = Formatter::new();
+        let formatted = formatter.format_program(&program);
+
+        let expected = "enum Direction {\n  Up = 1,\n  Down,\n}\n\nenum Status {\n  Ok = \"ok\",\n  Err = \"err\",\n}\n";
         assert_eq!(formatted, expected);
     }
 

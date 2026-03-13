@@ -133,6 +133,22 @@ pub struct ClassMethod {
 }
 
 #[derive(Debug, Clone)]
+pub struct EnumMember {
+    pub name: String,
+    pub name_span: Span,
+    pub value: Option<Expr>, // Explicit value (int or string)
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumDecl {
+    pub name: String,
+    pub name_span: Span,
+    pub members: Vec<EnumMember>,
+    pub span: Span,
+    pub doc: Option<DocComment>,
+}
+
+#[derive(Debug, Clone)]
 pub enum ImportItem {
     Named(Vec<(String, Span)>),
     Namespace((String, Span)),
@@ -140,6 +156,7 @@ pub enum ImportItem {
 
 #[derive(Debug, Clone)]
 pub enum Statement {
+    Enum(EnumDecl),
     VarDeclaration {
         name: String,
         name_span: Span,
@@ -208,6 +225,7 @@ pub enum Statement {
 impl Statement {
     pub fn span(&self) -> Span {
         match self {
+            Statement::Enum(d) => d.span,
             Statement::VarDeclaration { span, .. } => *span,
             Statement::FunctionDeclaration { span, .. } => *span,
             Statement::ClassDeclaration { span, .. } => *span,

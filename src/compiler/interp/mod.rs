@@ -275,6 +275,38 @@ impl Interpreter {
             return StatementResult::Throw(self.pending_exception.take().unwrap());
         }
         match stmt {
+            Statement::Enum(decl) => {
+                let mut members = HashMap::new();
+                let mut next_int_val = 0;
+                let mut is_string_enum = false;
+                
+                for member in &decl.members {
+                    let val = if let Some(ref expr) = member.value {
+                        let evaled = self.eval_expr(expr.clone());
+                        if let Value::String(_) = evaled {
+                            is_string_enum = true;
+                        } else if let Value::Int(n) = evaled {
+                            next_int_val = n + 1;
+                        } else if let Value::Int64(n) = evaled {
+                            next_int_val = (n + 1) as i32;
+                        }
+                        evaled
+                    } else {
+                        if is_string_enum {
+                            Value::Null // Should be handled by semantic analyzer
+                        } else {
+                            let curr = next_int_val;
+                            next_int_val += 1;
+                            Value::Int(curr)
+                        }
+                    };
+                    members.insert(member.name.clone(), val);
+                }
+                
+                self.static_fields.insert(decl.name.clone(), Rc::new(RefCell::new(members)));
+                self.env.insert(decl.name.clone(), Value::Class(decl.name.clone()));
+                StatementResult::None 
+            }
             Statement::VarDeclaration {
                 name,
                 name_span: _,

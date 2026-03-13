@@ -18,6 +18,7 @@ pub struct DocumentState {
     pub node_definitions: HashMap<Span, (String, Span)>,
     pub node_docs: HashMap<Span, String>,
     pub classes: HashMap<String, ClassInfo>,
+    pub analyzer_scope: HashMap<String, crate::compiler::sema::scope::Symbol>,
 }
 
 pub struct Backend {
@@ -285,6 +286,64 @@ impl LanguageServer for Backend {
                                 children: None,
                             });
                         }
+                        Statement::Enum(decl) => {
+                            let mut children = Vec::new();
+                            for member in &decl.members {
+                                children.push(DocumentSymbol {
+                                    name: member.name.clone(),
+                                    detail: None,
+                                    kind: SymbolKind::ENUM_MEMBER,
+                                    tags: None,
+                                    #[allow(deprecated)]
+                                    deprecated: None,
+                                    range: Range {
+                                        start: Position::new(
+                                            member.name_span.line as u32 - 1,
+                                            member.name_span.column as u32 - 1,
+                                        ),
+                                        end: Position::new(
+                                            member.name_span.line as u32 - 1,
+                                            member.name_span.column as u32 + member.name.len() as u32 - 1,
+                                        ),
+                                    },
+                                    selection_range: Range {
+                                        start: Position::new(
+                                            member.name_span.line as u32 - 1,
+                                            member.name_span.column as u32 - 1,
+                                        ),
+                                        end: Position::new(
+                                            member.name_span.line as u32 - 1,
+                                            member.name_span.column as u32 + member.name.len() as u32 - 1,
+                                        ),
+                                    },
+                                    children: None,
+                                });
+                            }
+
+                            symbols.push(DocumentSymbol {
+                                name: decl.name.clone(),
+                                detail: None,
+                                kind: SymbolKind::ENUM,
+                                tags: None,
+                                range: Range {
+                                    start: Position::new(
+                                        decl.span.line as u32 - 1,
+                                        decl.span.column as u32 - 1,
+                                    ),
+                                    end: Position::new(decl.span.line as u32 - 1, decl.span.column as u32),
+                                },
+                                selection_range: Range {
+                                    start: Position::new(
+                                        decl.span.line as u32 - 1,
+                                        decl.span.column as u32 - 1,
+                                    ),
+                                    end: Position::new(decl.span.line as u32 - 1, decl.span.column as u32),
+                                },
+                                #[allow(deprecated)]
+                                deprecated: None,
+                                children: Some(children),
+                            });
+                        }
                         _ => {}
                     }
                 }
@@ -364,6 +423,7 @@ impl LanguageServer for Backend {
                                                 kind: Some(match sym.ty {
                                                     Type::Function(_, _) => CompletionItemKind::FUNCTION,
                                                     Type::Class(_) => CompletionItemKind::CLASS,
+                                                    Type::Enum(_) => CompletionItemKind::ENUM,
                                                     _ => CompletionItemKind::VARIABLE,
                                                 }),
                                                 detail: Some(format!("{}", sym.ty)), // Use format! for nicer type display
@@ -446,6 +506,21 @@ impl LanguageServer for Backend {
                                                     label: fname.clone(),
                                                     kind: Some(CompletionItemKind::FIELD),
                                                     detail: Some(format!("{:?}", f_ty)),
+                                                    ..Default::default()
+                                                });
+                                            }
+                                        }
+                                    } else if let Type::Enum(enum_name) = ty {
+                                        // Enum Members
+                                        for (fqn, sym) in &state.analyzer_scope {
+                                            let prefix = format!("{}.", enum_name);
+                                            if fqn.starts_with(&prefix) {
+                                                let member_name = &fqn[enum_name.len() + 1..];
+                                                items.push(CompletionItem {
+                                                    label: member_name.to_string(),
+                                                    kind: Some(CompletionItemKind::ENUM_MEMBER),
+                                                    detail: Some(format!("{:?}", sym.ty)),
+                                                    documentation: sym.doc.as_ref().map(|d: &String| Documentation::String(d.clone())),
                                                     ..Default::default()
                                                 });
                                             }
@@ -744,6 +819,7 @@ impl Backend {
                     node_definitions: file_node_definitions,
                     node_docs: file_node_docs,
                     classes: analyzer.classes,
+                    analyzer_scope: analyzer.scope.symbols.clone(),
                 },
             );
         }

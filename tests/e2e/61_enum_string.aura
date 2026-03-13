@@ -1,0 +1,36 @@
+// Expected output:
+// UP
+// DOWN
+// 1
+// 0
+// true
+// false
+
+enum DirectionStr {
+    Up = "UP",
+    Down = "DOWN"
+}
+
+export function main() {
+    let u: DirectionStr = DirectionStr.Up;
+    let d: DirectionStr = DirectionStr.Down;
+    
+    print(u);
+    print(d);
+    
+    // Test equality
+    if (u == DirectionStr.Up) {
+        print(1);
+    } else {
+        print(0);
+    }
+    
+    if (u == DirectionStr.Down) {
+        print(1);
+    } else {
+        print(0);
+    }
+    
+    print(u == DirectionStr.Up);
+    print(u == DirectionStr.Down);
+}

@@ -8,6 +8,7 @@ pub struct Codegen {
     variables: HashMap<String, (usize, Type)>, // name -> (stack offset, type)
     global_variables: HashMap<String, (String, Type)>, // name -> (label, type)
     classes: HashMap<String, (Vec<String>, Vec<String>)>, // name -> (fields, methods)
+    enums: HashMap<String, HashMap<String, Expr>>, // name -> (member -> value)
     string_constants: HashMap<String, String>, // value -> label
     node_types: HashMap<String, HashMap<Span, Type>>,
     stack_offset: usize,
@@ -29,6 +30,7 @@ impl Codegen {
             variables: HashMap::new(),
             global_variables: HashMap::new(),
             classes: HashMap::new(),
+            enums: HashMap::new(),
             string_constants: HashMap::new(),
             node_types: HashMap::new(),
             stack_offset: 0,
@@ -56,6 +58,14 @@ impl Codegen {
         self.node_types
             .get(&self.current_file)
             .and_then(|m| m.get(span))
+    }
+
+    fn is_string_enum(&self, enum_name: &str) -> bool {
+        if let Some(members) = self.enums.get(enum_name) {
+            members.values().any(|v| matches!(v, Expr::StringLiteral(_, _)))
+        } else {
+            false
+        }
     }
 
     fn store_local(&mut self, reg: &str, offset: usize) {
@@ -116,6 +126,14 @@ impl Codegen {
 
         self.collect_all_definitions(program, &mut classes, &mut fns, &mut global_stmts);
 
+        let has_main = fns.iter().any(|(_, stmt)| {
+            if let Statement::FunctionDeclaration { name, .. } = stmt {
+                name == "main"
+            } else {
+                false
+            }
+        });
+
         for (path, c) in classes {
             self.current_file = path;
             self.generate_statement(c);
@@ -126,12 +144,27 @@ impl Codegen {
             self.generate_statement(f);
         }
 
+        // Check for explicit main() call before consuming global_stmts
+        let has_explicit_main_call = global_stmts.iter().any(|(_, stmt)| {
+            if let Statement::Expression(Expr::Call(ref name, _, _, _), _) = stmt {
+                name == "main"
+            } else {
+                false
+            }
+        });
+
         self.emitter.emit_header();
         self.is_global_scope = true;
         for (path, stmt) in global_stmts {
             self.current_file = path;
             self.generate_statement(stmt);
         }
+
+        // Call main_aura if it exists and wasn't already called explicitly
+        if has_main && !has_explicit_main_call {
+            self.emitter.call("_main_aura");
+        }
+
         self.emitter.emit_footer();
 
         // Emit global variables in .data section
@@ -246,15 +279,41 @@ impl Codegen {
                         }
                     }
                 }
+                Statement::Enum(ref decl) => {
+                    let mut members = HashMap::new();
+                    let mut next_int: i64 = 0;
+                    for member in &decl.members {
+                        if let Some(ref expr) = member.value {
+                            if let Expr::Number(val, _) = expr {
+                                next_int = *val + 1;
+                            }
+                            members.insert(member.name.clone(), expr.clone());
+                        } else {
+                            members.insert(member.name.clone(), Expr::Number(next_int, member.name_span));
+                            next_int += 1;
+                        }
+                    }
+                    self.enums.insert(decl.name.clone(), members);
+                }
                 Statement::VarDeclaration {
                     ref name,
                     ref value,
                     ..
                 } => {
-                    let var_ty = self
+                    let mut var_ty = self
                         .get_node_type(&value.span())
                         .cloned()
                         .unwrap_or(Type::Unknown);
+                    if matches!(var_ty, Type::Unknown) {
+                        // Infer type from value expression when node_types aren't available
+                        if let Expr::MemberAccess(ref obj, _, _, _) = value {
+                            if let Expr::Variable(ref enum_name, _) = **obj {
+                                if self.enums.contains_key(enum_name.as_str()) {
+                                    var_ty = Type::Enum(enum_name.clone());
+                                }
+                            }
+                        }
+                    }
                     let label = format!("_g_{}", name);
                     self.global_variables.insert(name.clone(), (label, var_ty));
                     global_stmts.push((program.file_path.clone(), actual_stmt));
@@ -296,6 +355,7 @@ impl Codegen {
 
     fn generate_statement(&mut self, stmt: Statement) {
         match stmt {
+            Statement::Enum(_) => {}
             Statement::Comment(_, _) | Statement::RegularBlockComment(_, _) => {}
             Statement::VarDeclaration {
                 name, ty: _, value, ..
@@ -442,6 +502,11 @@ impl Codegen {
                             Type::Array(_) => is_array = true,
                             Type::Generic(ref name, _) if name == "Promise" => is_promise = true,
                             Type::Null => is_null = true,
+                            Type::Enum(ref enum_name) => {
+                                if self.is_string_enum(enum_name) {
+                                    is_str = true;
+                                }
+                            }
                             _ => {}
                         }
                     } else if let Some((_, ty)) = self.global_variables.get(name) {
@@ -451,6 +516,11 @@ impl Codegen {
                             Type::Array(_) => is_array = true,
                             Type::Generic(ref name, _) if name == "Promise" => is_promise = true,
                             Type::Null => is_null = true,
+                            Type::Enum(ref enum_name) => {
+                                if self.is_string_enum(enum_name) {
+                                    is_str = true;
+                                }
+                            }
                             _ => {}
                         }
                     }
@@ -462,7 +532,40 @@ impl Codegen {
                         Type::Array(_) => is_array = true,
                         Type::Generic(ref name, _) if name == "Promise" => is_promise = true,
                         Type::Null => is_null = true,
+                        Type::Enum(ref enum_name) => {
+                            if self.is_string_enum(enum_name) {
+                                is_str = true;
+                            }
+                        }
                         _ => {}
+                    }
+                }
+
+                // Check if this is a string-backed enum variable
+                if !is_str {
+                    let enum_name: Option<String> = if let Expr::Variable(ref var_name, _) = expr {
+                        let local_ty = self.variables.get(var_name).map(|(_, t)| t.clone());
+                        let ty = local_ty.or_else(|| {
+                            self.global_variables.get(var_name).map(|(_, t)| t.clone())
+                        });
+                        if let Some(Type::Enum(name)) = ty {
+                            Some(name)
+                        } else {
+                            None
+                        }
+                    } else {
+                        self.get_node_type(&expr.span()).and_then(|t| {
+                            if let Type::Enum(ref n) = t {
+                                Some(n.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    };
+                    if let Some(ref name) = enum_name {
+                        if self.is_string_enum(name) {
+                            is_str = true;
+                        }
                     }
                 }
 
@@ -846,6 +949,15 @@ impl Codegen {
                 self.emitter.output.push_str("    ldr x0, [sp], 16\n");
             }
             Expr::MemberAccess(obj, member, _, _span) => {
+                if let Expr::Variable(ref name, _) = *obj {
+                    if let Some(enum_def) = self.enums.get(name) {
+                        if let Some(val_expr) = enum_def.get(&member) {
+                            self.generate_expr(val_expr.clone());
+                            return;
+                        }
+                    }
+                }
+
                 let obj_span = obj.span();
                 let mut offset = 0;
                 let mut ty = self

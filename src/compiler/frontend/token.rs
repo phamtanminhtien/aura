@@ -13,6 +13,7 @@ pub enum TokenKind {
     Class,
     Constructor,
     New,
+    Enum,
     This,
     Is,
     Import,
