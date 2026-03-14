@@ -1,5 +1,6 @@
 /**
  * Base class for all errors in Aura.
+ * This report error "Duplicate declaration: Error" because in compiler, it was declared in std/core.aura and. Ignore it.
  */
 class Error {
   message: string;
