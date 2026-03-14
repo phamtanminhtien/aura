@@ -184,42 +184,55 @@ macro_rules! e2e_test {
     };
 }
 
-e2e_test!(test_01_basic_types, "01_basic_types.aura");
-e2e_test!(test_02_variables_inference, "02_variables_inference.aura");
-e2e_test!(test_03_arithmetic, "03_arithmetic.aura");
-e2e_test!(test_04_comparison, "04_comparison.aura");
-e2e_test!(test_05_if_else, "05_if_else.aura");
-e2e_test!(test_06_while_loop, "06_while_loop.aura");
-e2e_test!(test_07_functions, "07_functions.aura");
-e2e_test!(test_08_recursion, "08_recursion.aura");
-e2e_test!(test_09_classes_basic, "09_classes_basic.aura");
-e2e_test!(test_10_classes_methods, "10_classes_methods.aura");
-e2e_test!(test_11_classes_static, "11_classes_inheritance.aura");
-e2e_test!(test_12_mutation_loop, "12_mutation_loop.aura");
-e2e_test!(test_13_string_literals, "13_string_literals.aura");
-e2e_test!(test_14_nested_functions, "14_nested_functions.aura");
-e2e_test!(test_15_loop_sum, "15_loop_sum.aura");
-e2e_test!(test_16_unary_negation, "16_unary_negation.aura");
-e2e_test!(test_17_multi_class, "17_multi_class.aura");
-e2e_test!(test_18_assign_update, "18_assign_update.aura");
-e2e_test!(
-    test_19_function_returning_string,
-    "19_function_returning_string.aura"
-);
-e2e_test!(test_20_class_method_chain, "20_class_method_chain.aura");
-e2e_test!(test_21_template_literal, "21_template_literal.aura");
-e2e_test!(test_22_async_test, "22_async_test.aura");
-e2e_test!(test_23_math, "23_math.aura");
-e2e_test!(test_24_try_catch_basic, "24_try_catch_basic.aura");
-e2e_test!(test_25_try_catch_nested, "25_try_catch_nested.aura");
-e2e_test!(test_26_fs_basic, "26_fs_basic.aura");
-e2e_test!(test_30_stdlib_string_array, "30_stdlib_string_array.aura");
-e2e_test!(test_40_net_tcp, "40_net_tcp.aura");
-e2e_test!(test_41_http_client, "41_http_client.aura");
-e2e_test!(test_44_stdlib_date, "44_stdlib_date.aura");
-e2e_test!(test_60_enum_numeric, "60_enum_numeric.aura");
-e2e_test!(test_61_enum_string, "61_enum_string.aura");
-e2e_test!(
-    test_62_enum_string_global_scope,
-    "62_enum_string_global_scope.aura"
-);
+// --- 01_core ---
+e2e_test!(core_types, "01_core/01_types.aura");
+e2e_test!(core_inference, "01_core/02_inference.aura");
+e2e_test!(core_arithmetic, "01_core/03_arithmetic.aura");
+e2e_test!(core_comparison, "01_core/04_comparison.aura");
+e2e_test!(core_strings, "01_core/05_strings.aura");
+e2e_test!(core_unary, "01_core/06_unary.aura");
+e2e_test!(core_assignment, "01_core/07_assignment.aura");
+e2e_test!(core_template, "01_core/08_template.aura");
+
+// --- 02_control_flow ---
+e2e_test!(flow_if_else, "02_control_flow/01_if_else.aura");
+e2e_test!(flow_while, "02_control_flow/02_while.aura");
+e2e_test!(flow_mutation, "02_control_flow/03_mutation.aura");
+e2e_test!(flow_loop_sum, "02_control_flow/04_loop_sum.aura");
+
+// --- 03_functions ---
+e2e_test!(fn_basic, "03_functions/01_basic.aura");
+e2e_test!(fn_recursion, "03_functions/02_recursion.aura");
+e2e_test!(fn_nested, "03_functions/03_nested.aura");
+e2e_test!(fn_return_string, "03_functions/04_return_string.aura");
+
+// --- 04_oop ---
+e2e_test!(oop_basic, "04_oop/01_basic.aura");
+e2e_test!(oop_methods, "04_oop/02_methods.aura");
+e2e_test!(oop_inheritance, "04_oop/03_inheritance.aura");
+e2e_test!(oop_multi_class, "04_oop/04_multi_class.aura");
+e2e_test!(oop_chaining, "04_oop/05_chaining.aura");
+
+// --- 05_enums ---
+e2e_test!(enum_numeric, "05_enums/01_numeric.aura");
+e2e_test!(enum_string, "05_enums/02_string.aura");
+e2e_test!(enum_global_scope, "05_enums/03_global_scope.aura");
+
+// --- 06_async ---
+e2e_test!(async_basic, "06_async/01_async.aura");
+
+// --- 07_error_handling ---
+e2e_test!(error_basic, "07_error_handling/01_basic.aura");
+e2e_test!(error_nested, "07_error_handling/02_nested.aura");
+
+// --- 08_stdlib ---
+e2e_test!(std_math, "08_stdlib/01_math.aura");
+e2e_test!(std_fs, "08_stdlib/02_fs.aura");
+e2e_test!(std_string_array, "08_stdlib/03_string_array.aura");
+e2e_test!(std_net_tcp, "08_stdlib/04_net_tcp.aura");
+e2e_test!(std_http_client, "08_stdlib/05_http_client.aura");
+e2e_test!(std_http_server, "08_stdlib/06_http_server.aura");
+e2e_test!(std_http_types, "08_stdlib/07_http_types.aura");
+e2e_test!(std_date, "08_stdlib/08_date.aura");
+e2e_test!(std_timer, "08_stdlib/09_timer.aura");
+e2e_test!(std_interval, "08_stdlib/10_interval.aura");
