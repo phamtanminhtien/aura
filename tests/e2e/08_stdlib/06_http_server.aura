@@ -1,4 +1,9 @@
+// Expected output:
+// HTTP Server test
+// Server initialized on 45678
+
 import { HTTPServer, HTTPResponse, HTTPRequest } from "std/http.aura";
+
 
 // Test basic HTTPServer structure
 // This test starts a server and prints a message.
