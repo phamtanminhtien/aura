@@ -1,54 +1,12 @@
 use crate::compiler::ast::{
-    ClassMethod, DocComment, Expr, Field, ImportItem, Program, Span, Statement, TemplatePart,
-    TplPart, TypeExpr,
+    ClassMethod, DocComment, Expr, Field, ImportItem, Span, Statement, TypeExpr,
 };
-use crate::compiler::frontend::error::{Diagnostic, DiagnosticList};
+use crate::compiler::frontend::error::Diagnostic;
+use crate::compiler::frontend::parser::Parser;
 use crate::compiler::frontend::token::{Token, TokenKind};
 
-pub struct Parser {
-    tokens: Vec<Token>,
-    pos: usize,
-    pub diagnostics: DiagnosticList,
-    panic_mode: bool,
-    file_path: String,
-}
-
 impl Parser {
-    pub fn new(tokens: Vec<Token>, file_path: String) -> Self {
-        Self {
-            tokens,
-            pos: 0,
-            diagnostics: DiagnosticList::new(),
-            panic_mode: false,
-            file_path,
-        }
-    }
-
-    fn span(&self) -> Span {
-        let token = self.peek();
-        Span::new(token.line, token.column)
-    }
-
-    pub fn parse_program(&mut self) -> Program {
-        let mut statements = Vec::new();
-        while !self.is_at_end() {
-            match self.parse_statement() {
-                Ok(stmt) => {
-                    statements.push(stmt);
-                    self.panic_mode = false;
-                }
-                Err(_) => {
-                    self.synchronize();
-                }
-            }
-        }
-        Program {
-            statements,
-            file_path: self.file_path.clone(),
-        }
-    }
-
-    fn parse_statement(&mut self) -> Result<Statement, ()> {
+    pub(crate) fn parse_statement(&mut self) -> Result<Statement, ()> {
         let s = self.span();
         let doc = self.parse_doc_comments();
         let mut is_async = false;
@@ -107,7 +65,7 @@ impl Parser {
         }
     }
 
-    fn parse_doc_comments(&mut self) -> Option<DocComment> {
+    pub(crate) fn parse_doc_comments(&mut self) -> Option<DocComment> {
         let mut last_doc = None;
         loop {
             match self.peek().kind.clone() {
@@ -130,7 +88,7 @@ impl Parser {
         last_doc
     }
 
-    fn parse_block(&mut self) -> Statement {
+    pub(crate) fn parse_block(&mut self) -> Statement {
         let s = self.span();
         let _ = self.consume(TokenKind::OpenBrace);
         let mut statements = Vec::new();
@@ -147,24 +105,20 @@ impl Parser {
         Statement::Block(statements, s)
     }
 
-    fn parse_return_statement(&mut self) -> Result<Statement, ()> {
+    pub(crate) fn parse_return_statement(&mut self) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Return)?;
         let expr = if self.peek().kind == TokenKind::Semicolon {
-            Expr::Number(0, s) // Default to 0/void-ish for now if empty?
-                               // Actually, better to have a Expr::Void or handle it in AST
-                               // Let's check Expr variants.
+            Expr::Number(0, s)
         } else {
             self.parse_expression()
         };
 
-        // Wait, if I use Expr::Number(0, s), it might not be what's wanted for void.
-        // Let's check Expr in ast.rs.
         self.consume(TokenKind::Semicolon)?;
         Ok(Statement::Return(expr, s))
     }
 
-    fn parse_import_statement(&mut self) -> Result<Statement, ()> {
+    pub(crate) fn parse_import_statement(&mut self) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Import)?;
 
@@ -220,7 +174,10 @@ impl Parser {
         })
     }
 
-    fn parse_export_statement(&mut self, doc: Option<DocComment>) -> Result<Statement, ()> {
+    pub(crate) fn parse_export_statement(
+        &mut self,
+        doc: Option<DocComment>,
+    ) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Export)?;
 
@@ -256,7 +213,7 @@ impl Parser {
         })
     }
 
-    fn parse_type_expr(&mut self) -> TypeExpr {
+    pub(crate) fn parse_type_expr(&mut self) -> TypeExpr {
         let s = self.span();
         let mut types = Vec::new();
         types.push(self.parse_primary_type());
@@ -272,7 +229,6 @@ impl Parser {
             TypeExpr::Union(types, s)
         };
 
-        // Support array types: string[], i32[][], etc.
         while self.peek().kind == TokenKind::OpenBracket {
             self.advance();
             let _ = self.consume(TokenKind::CloseBracket);
@@ -282,7 +238,7 @@ impl Parser {
         ty
     }
 
-    fn parse_primary_type(&mut self) -> TypeExpr {
+    pub(crate) fn parse_primary_type(&mut self) -> TypeExpr {
         let s = self.span();
         let kind = self.peek().kind.clone();
         match kind {
@@ -331,7 +287,7 @@ impl Parser {
         }
     }
 
-    fn parse_function_declaration(
+    pub(crate) fn parse_function_declaration(
         &mut self,
         doc: Option<DocComment>,
         is_async: bool,
@@ -394,7 +350,10 @@ impl Parser {
         })
     }
 
-    fn parse_var_declaration(&mut self, doc: Option<DocComment>) -> Result<Statement, ()> {
+    pub(crate) fn parse_var_declaration(
+        &mut self,
+        doc: Option<DocComment>,
+    ) -> Result<Statement, ()> {
         let s = self.span();
         let is_const = if self.peek().kind == TokenKind::Const {
             self.advance();
@@ -446,7 +405,7 @@ impl Parser {
         })
     }
 
-    fn parse_print_statement(&mut self) -> Result<Statement, ()> {
+    pub(crate) fn parse_print_statement(&mut self) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Print)?;
 
@@ -467,7 +426,7 @@ impl Parser {
         Ok(Statement::Print(expr, s))
     }
 
-    fn parse_if_statement(&mut self) -> Result<Statement, ()> {
+    pub(crate) fn parse_if_statement(&mut self) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::If)?;
         let _ = self.consume(TokenKind::OpenParen);
@@ -502,7 +461,7 @@ impl Parser {
         })
     }
 
-    fn parse_while_statement(&mut self) -> Result<Statement, ()> {
+    pub(crate) fn parse_while_statement(&mut self) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::While)?;
         let _ = self.consume(TokenKind::OpenParen);
@@ -524,7 +483,10 @@ impl Parser {
         })
     }
 
-    fn parse_class_declaration(&mut self, doc: Option<DocComment>) -> Result<Statement, ()> {
+    pub(crate) fn parse_class_declaration(
+        &mut self,
+        doc: Option<DocComment>,
+    ) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Class)?;
         let (name, name_span) = if let Token {
@@ -561,7 +523,7 @@ impl Parser {
             if self.peek().kind == TokenKind::Static {
                 self.advance();
                 is_static = true;
-                ms = self.span(); // Update span to include static if needed? or keep original?
+                ms = self.span();
             }
 
             let mut is_async = false;
@@ -673,7 +635,6 @@ impl Parser {
                     let fs = self.span();
                     self.advance();
                     if self.peek().kind == TokenKind::OpenParen {
-                        // Method without 'function' keyword
                         let _ = self.consume(TokenKind::OpenParen);
                         let mut params = Vec::new();
                         while self.peek().kind != TokenKind::CloseParen && !self.is_at_end() {
@@ -711,7 +672,6 @@ impl Parser {
                             doc: member_doc,
                         });
                     } else {
-                        // It's a field
                         let _ = self.consume(TokenKind::Colon);
                         let fty = self.parse_type_expr();
                         let value = if self.peek().kind == TokenKind::Equal {
@@ -760,7 +720,10 @@ impl Parser {
         })
     }
 
-    fn parse_enum_declaration(&mut self, doc: Option<DocComment>) -> Result<Statement, ()> {
+    pub(crate) fn parse_enum_declaration(
+        &mut self,
+        doc: Option<DocComment>,
+    ) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Enum)?;
         let (name, name_span) = if let Token {
@@ -833,431 +796,7 @@ impl Parser {
         }))
     }
 
-    fn parse_expression(&mut self) -> Expr {
-        let s = self.span();
-        let node = self.parse_logical_or();
-
-        if self.peek().kind == TokenKind::Equal {
-            self.advance();
-            let value = self.parse_expression();
-            if let Expr::Variable(name, vs) = node {
-                return Expr::Assign(name, Box::new(value), vs);
-            } else if let Expr::MemberAccess(obj, member, name_span, _ms) = node {
-                return Expr::MemberAssign(obj, member, Box::new(value), name_span, s);
-            } else {
-                let token = self.peek();
-                self.diagnostics.push(Diagnostic::error(
-                    "Invalid assignment target".to_string(),
-                    token.line,
-                    token.column,
-                ));
-                return Expr::Error(s);
-            }
-        }
-
-        node
-    }
-
-    fn parse_logical_or(&mut self) -> Expr {
-        let s = self.span();
-        let mut node = self.parse_logical_and();
-        while self.peek().kind == TokenKind::Or {
-            self.advance();
-            let right = self.parse_logical_and();
-            node = Expr::BinaryOp(Box::new(node), "||".to_string(), Box::new(right), s);
-        }
-        node
-    }
-
-    fn parse_logical_and(&mut self) -> Expr {
-        let s = self.span();
-        let mut node = self.parse_comparison();
-        while self.peek().kind == TokenKind::And {
-            self.advance();
-            let right = self.parse_comparison();
-            node = Expr::BinaryOp(Box::new(node), "&&".to_string(), Box::new(right), s);
-        }
-        node
-    }
-
-    fn parse_comparison(&mut self) -> Expr {
-        let s = self.span();
-        let mut node = self.parse_bitwise_or();
-
-        while let TokenKind::Less
-        | TokenKind::LessEqual
-        | TokenKind::Greater
-        | TokenKind::GreaterEqual
-        | TokenKind::EqEqual
-        | TokenKind::BangEqual = self.peek().kind
-        {
-            let op = match self.peek().kind {
-                TokenKind::Less => "<",
-                TokenKind::LessEqual => "<=",
-                TokenKind::Greater => ">",
-                TokenKind::GreaterEqual => ">=",
-                TokenKind::EqEqual => "==",
-                TokenKind::BangEqual => "!=",
-                _ => unreachable!(),
-            }
-            .to_string();
-            self.advance();
-            let right = self.parse_bitwise_or(); // Use bitwise_or for right side too
-            node = Expr::BinaryOp(Box::new(node), op, Box::new(right), s);
-        }
-
-        node
-    }
-
-    fn parse_bitwise_or(&mut self) -> Expr {
-        let s = self.span();
-        let mut node = self.parse_type_test();
-        while self.peek().kind == TokenKind::Pipe {
-            self.advance();
-            let right = self.parse_type_test();
-            node = Expr::BinaryOp(Box::new(node), "|".to_string(), Box::new(right), s);
-        }
-        node
-    }
-
-    fn parse_type_test(&mut self) -> Expr {
-        let s = self.span();
-        let mut node = self.parse_arithmetic();
-        while self.peek().kind == TokenKind::Is {
-            self.advance();
-            let ty = self.parse_type_expr();
-            node = Expr::TypeTest(Box::new(node), ty, s);
-        }
-        node
-    }
-
-    fn parse_arithmetic(&mut self) -> Expr {
-        let s = self.span();
-        let mut node = self.parse_multiplicative();
-
-        while let TokenKind::Plus | TokenKind::Minus = self.peek().kind {
-            let op = match self.peek().kind {
-                TokenKind::Plus => "+",
-                TokenKind::Minus => "-",
-                _ => unreachable!(),
-            }
-            .to_string();
-            self.advance();
-            let right = self.parse_multiplicative();
-            node = Expr::BinaryOp(Box::new(node), op, Box::new(right), s);
-        }
-
-        node
-    }
-
-    fn parse_multiplicative(&mut self) -> Expr {
-        let s = self.span();
-        let mut node = self.parse_unary();
-
-        while let TokenKind::Star | TokenKind::Slash | TokenKind::Percent = self.peek().kind {
-            let op = match self.peek().kind {
-                TokenKind::Star => "*",
-                TokenKind::Slash => "/",
-                TokenKind::Percent => "%",
-                _ => unreachable!(),
-            }
-            .to_string();
-            self.advance();
-            let right = self.parse_primary();
-            node = Expr::BinaryOp(Box::new(node), op, Box::new(right), s);
-        }
-
-        node
-    }
-
-    fn parse_unary(&mut self) -> Expr {
-        let s = self.span();
-        if self.peek().kind == TokenKind::Minus {
-            self.advance();
-            let expr = self.parse_unary();
-            return Expr::UnaryOp("-".to_string(), Box::new(expr), s);
-        }
-        self.parse_primary()
-    }
-
-    fn parse_primary(&mut self) -> Expr {
-        let s = self.span();
-        let node = match self.peek().kind.clone() {
-            TokenKind::Number(val) => {
-                self.advance();
-                Expr::Number(val, s)
-            }
-            TokenKind::StringLiteral(ls) => {
-                self.advance();
-                Expr::StringLiteral(ls, s)
-            }
-            TokenKind::TemplateLiteral(parts) => {
-                self.advance();
-                let mut ast_parts = Vec::new();
-                for part in parts {
-                    match part {
-                        TplPart::Str(st) => ast_parts.push(TemplatePart::Str(st)),
-                        TplPart::Expr(src, line, col) => {
-                            let mut sub_lexer =
-                                crate::compiler::frontend::lexer::Lexer::new_with_offset(
-                                    &src, line, col,
-                                );
-                            let sub_tokens = sub_lexer.lex_all();
-                            let mut sub_parser = Parser::new(sub_tokens, self.file_path.clone());
-                            let expr = sub_parser.parse_expression();
-                            for mut d in sub_lexer.diagnostics.diagnostics {
-                                d.line += s.line - 1;
-                                self.diagnostics.push(d);
-                            }
-                            for mut d in sub_parser.diagnostics.diagnostics {
-                                d.line += s.line - 1;
-                                self.diagnostics.push(d);
-                            }
-                            ast_parts.push(TemplatePart::Expr(Box::new(expr)));
-                        }
-                    }
-                }
-                Expr::Template(ast_parts, s)
-            }
-            TokenKind::Null => {
-                self.advance();
-                Expr::Null(s)
-            }
-            TokenKind::Identifier(name) => {
-                self.advance();
-                Expr::Variable(name, s)
-            }
-            TokenKind::This => {
-                self.advance();
-                Expr::This(s)
-            }
-            TokenKind::New => {
-                let ns = self.span();
-                self.advance();
-                let (name, name_span) = if let Token {
-                    kind: TokenKind::Identifier(name),
-                    line,
-                    column,
-                } = self.peek().clone()
-                {
-                    self.advance();
-                    (name, Span::new(line, column))
-                } else {
-                    if !self.panic_mode {
-                        let token = self.peek();
-                        self.diagnostics.push(Diagnostic::error(
-                            "Expected class name after new".to_string(),
-                            token.line,
-                            token.column,
-                        ));
-                        self.panic_mode = true;
-                    }
-                    ("Error".to_string(), Span::new(0, 0))
-                };
-
-                let _ = self.consume(TokenKind::OpenParen);
-                let mut args = Vec::new();
-                while self.peek().kind != TokenKind::CloseParen && !self.is_at_end() {
-                    args.push(self.parse_expression());
-                    if self.peek().kind == TokenKind::Comma {
-                        self.advance();
-                    }
-                }
-                let _ = self.consume(TokenKind::CloseParen);
-                Expr::New(name, name_span, args, ns)
-            }
-            TokenKind::OpenParen => {
-                self.advance();
-                let expr = self.parse_expression();
-                let _ = self.consume(TokenKind::CloseParen);
-                expr
-            }
-            TokenKind::Await => {
-                self.advance();
-                let expr = self.parse_unary();
-                Expr::Await(Box::new(expr), s)
-            }
-            TokenKind::OpenBracket => self.parse_array_literal(),
-            _ => {
-                if !self.panic_mode {
-                    let token = self.peek();
-                    self.diagnostics.push(Diagnostic::error(
-                        format!("Unexpected token {:?}", token.kind),
-                        token.line,
-                        token.column,
-                    ));
-                    self.panic_mode = true;
-                }
-                Expr::Error(s)
-            }
-        };
-        self.parse_postfix(node)
-    }
-
-    fn parse_array_literal(&mut self) -> Expr {
-        let s = self.span();
-        let _ = self.consume(TokenKind::OpenBracket);
-        let mut elements = Vec::new();
-        while self.peek().kind != TokenKind::CloseBracket && !self.is_at_end() {
-            elements.push(self.parse_expression());
-            if self.peek().kind == TokenKind::Comma {
-                self.advance();
-            }
-        }
-        let _ = self.consume(TokenKind::CloseBracket);
-        Expr::ArrayLiteral(elements, s)
-    }
-
-    fn parse_postfix(&mut self, mut node: Expr) -> Expr {
-        let mut loop_count = 0;
-        loop {
-            loop_count += 1;
-            let token = self.peek();
-            if loop_count > 100 {
-                panic!(
-                    "Infinite loop detected in parse_postfix at line {}, col {}. Near token: {:?}",
-                    token.line, token.column, token.kind
-                );
-            }
-            let s = self.span();
-            match self.peek().kind {
-                TokenKind::Dot => {
-                    self.advance();
-                    let (member, name_span) = if let Token {
-                        kind: TokenKind::Identifier(m),
-                        line,
-                        column,
-                    } = self.peek().clone()
-                    {
-                        self.advance();
-                        (Some(m), Span::new(line, column))
-                    } else {
-                        if !self.panic_mode {
-                            let token = self.peek();
-                            self.diagnostics.push(Diagnostic::error(
-                                "Expected member name after .".to_string(),
-                                token.line,
-                                token.column,
-                            ));
-                            self.panic_mode = true;
-                        }
-                        (None, Span::new(0, 0))
-                    };
-                    if let Some(m) = member {
-                        node = Expr::MemberAccess(Box::new(node), m, name_span, s);
-                    } else {
-                        node = Expr::Error(s);
-                    }
-                }
-                TokenKind::OpenParen => {
-                    self.advance();
-                    let mut args = Vec::new();
-                    let mut sub_loop_count = 0;
-                    while self.peek().kind != TokenKind::CloseParen && !self.is_at_end() {
-                        sub_loop_count += 1;
-                        if sub_loop_count > 1000 {
-                            panic!("Infinite loop detected in parse_postfix arguments at line {}, col {}", self.peek().line, self.peek().column);
-                        }
-                        let start_pos = self.pos;
-                        args.push(self.parse_expression());
-                        if self.peek().kind == TokenKind::Comma {
-                            self.advance();
-                        }
-                        if self.pos == start_pos {
-                            // Failsafe: if we didn't advance, skip one token
-                            self.advance();
-                        }
-                    }
-                    let _ = self.consume(TokenKind::CloseParen);
-
-                    if let Expr::Variable(name, name_span) = node.clone() {
-                        node = Expr::Call(name, name_span, args, s);
-                    } else if let Expr::MemberAccess(obj, member, name_span, _) = node.clone() {
-                        node = Expr::MethodCall(obj, member, name_span, args, s);
-                    } else {
-                        if !self.panic_mode {
-                            let token = self.peek();
-                            self.diagnostics.push(Diagnostic::error(
-                                "Invalid call target".to_string(),
-                                token.line,
-                                token.column,
-                            ));
-                            self.panic_mode = true;
-                        }
-                        node = Expr::Error(s);
-                    }
-                }
-                TokenKind::OpenBracket => {
-                    self.advance();
-                    let index = self.parse_expression();
-                    let _ = self.consume(TokenKind::CloseBracket);
-                    node = Expr::Index(Box::new(node), Box::new(index), s);
-                }
-                _ => break,
-            }
-        }
-        node
-    }
-
-    fn peek(&self) -> &Token {
-        &self.tokens[self.pos]
-    }
-
-    fn advance(&mut self) -> &Token {
-        if !self.is_at_end() {
-            self.pos += 1;
-        }
-        &self.tokens[self.pos - 1]
-    }
-
-    fn consume(&mut self, kind: TokenKind) -> Result<(), ()> {
-        if self.peek().kind == kind {
-            self.advance();
-            Ok(())
-        } else {
-            if !self.panic_mode {
-                let token = self.peek();
-                self.diagnostics.push(Diagnostic::error(
-                    format!("Expected {:?}, found {:?}", kind, token.kind),
-                    token.line,
-                    token.column,
-                ));
-                self.panic_mode = true;
-            }
-            Err(())
-        }
-    }
-
-    fn synchronize(&mut self) {
-        self.panic_mode = false;
-        self.advance();
-
-        while !self.is_at_end() {
-            if self.tokens[self.pos - 1].kind == TokenKind::Semicolon {
-                return;
-            }
-
-            match self.peek().kind {
-                TokenKind::Class
-                | TokenKind::Function
-                | TokenKind::Let
-                | TokenKind::If
-                | TokenKind::While
-                | TokenKind::Print
-                | TokenKind::Return
-                | TokenKind::Import
-                | TokenKind::Export
-                | TokenKind::Try
-                | TokenKind::Throw
-                | TokenKind::CloseBrace => return,
-                _ => {}
-            }
-
-            self.advance();
-        }
-    }
-
-    fn parse_try_statement(&mut self) -> Result<Statement, ()> {
+    pub(crate) fn parse_try_statement(&mut self) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Try)?;
         let try_block = Box::new(self.parse_block());
@@ -1302,15 +841,11 @@ impl Parser {
         })
     }
 
-    fn parse_throw_statement(&mut self) -> Result<Statement, ()> {
+    pub(crate) fn parse_throw_statement(&mut self) -> Result<Statement, ()> {
         let s = self.span();
         self.consume(TokenKind::Throw)?;
         let expr = self.parse_expression();
         self.consume(TokenKind::Semicolon)?;
         Ok(Statement::Expression(Expr::Throw(Box::new(expr), s), s))
-    }
-
-    fn is_at_end(&self) -> bool {
-        self.peek().kind == TokenKind::EOF
     }
 }
