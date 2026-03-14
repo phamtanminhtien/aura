@@ -1,5 +1,10 @@
 ## [unreleased]
 
+### 🐛 Bug Fixes
+
+- Prevent redundant file processing and refine duplicate declaration checks. (#5)
+## [0.2.7] - 2026-03-13
+
 ### 🚀 Features
 
 - Implement esbuild for extension bundling and enhance activation logging with detailed context and error information.
@@ -14,6 +19,8 @@
 ### ⚙️ Miscellaneous Tasks
 
 - Add path filtering to the pull request CI workflow trigger.
+- Update changelog
+- Release aura version 0.2.7
 ## [0.2.6] - 2026-03-13
 
 ### 🚀 Features
