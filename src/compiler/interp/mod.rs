@@ -5,7 +5,6 @@ use crate::compiler::sema::ty::Type;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
-use std::time::Instant;
 use value::Value;
 
 #[derive(Debug, Clone)]
