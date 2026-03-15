@@ -1,3 +1,14 @@
+## [0.2.10] - 2026-03-15
+
+### 🚀 Features
+
+- Implement abstract classes and methods, including lexer support, semantic checks, IR lowering for virtual calls, and new e2e tests for polymorphism and multiple interfaces.
+- Implement formatting for `abstract` classes and methods, and update method declaration syntax to remove the `function` keyword.
+- Explicitly declare class fields, constructors, and methods as public.
+- Implement bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`) across the frontend, IR, interpreter, and AArch64 backend.
+- Introduce bitwise operator syntax highlighting, configure VS Code language server path, and update bitwise test file syntax.
+- Add comprehensive floating-point number support to the language, compiler, and runtime.
+- Implement a release script for automated builds and add build artifacts to gitignore.
 ## [0.2.9] - 2026-03-15
 
 ### 🚀 Features
@@ -42,6 +53,7 @@
 - Update release configuration and remove obsolete release script
 - Update Rust version to 1.94 in Cargo.toml and add rust-toolchain.toml for toolchain management
 - Update pre-release commit message format in Cargo.toml
+- *(release)* V0.2.9
 
 ### ◀️ Revert
 
