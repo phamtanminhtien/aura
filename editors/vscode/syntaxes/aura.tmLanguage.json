@@ -168,15 +168,19 @@
       "patterns": [
         {
           "name": "keyword.operator.arithmetic.aura",
-          "match": "\\b(\\+|-|\\*|/|%|\\*\\*)\\b"
+          "match": "(\\+|-|\\*|/|%|\\*\\*)"
         },
         {
           "name": "keyword.operator.logical.aura",
-          "match": "\\b(&&|\\|\\||!)\\b"
+          "match": "(&&|\\|\\||!)"
         },
         {
           "name": "keyword.operator.comparison.aura",
-          "match": "\\b(==|!=|<|>|<=|>=)\\b"
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.bitwise.aura",
+          "match": "(<<|>>|&|\\||\\^|~)"
         },
         {
           "name": "keyword.operator.assignment.aura",
