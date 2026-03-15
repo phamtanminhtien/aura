@@ -1,4 +1,4 @@
-## [unreleased]
+## [0.2.9] - 2026-03-15
 
 ### 🚀 Features
 
@@ -34,6 +34,14 @@
 
 - Add documentation for union types, JSON handling design, and OOP concepts, and update existing syntax documentation.
 - Remove documentation for Aura union types
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog
+- Release aura version 0.2.9
+- Update release configuration and remove obsolete release script
+- Update Rust version to 1.94 in Cargo.toml and add rust-toolchain.toml for toolchain management
+- Update pre-release commit message format in Cargo.toml
 
 ### ◀️ Revert
 
