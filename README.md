@@ -15,6 +15,20 @@
 - **LSP server**: `aura lsp` (hover, completion, go-to-definition, formatting, symbols)
 - **VS Code extension**: `editors/vscode/`
 
+## Installation
+
+Install the latest version of Aura:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/phamtanminhtien/aura/master/scripts/install.sh | bash
+```
+
+To install a specific version (e.g., `v0.2.`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/phamtanminhtien/aura/master/scripts/install.sh | bash -s -- v0.2.9
+```
+
 ## Build
 
 Requires a recent Rust toolchain (edition 2021).
