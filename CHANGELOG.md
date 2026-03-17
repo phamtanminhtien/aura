@@ -9,6 +9,27 @@
 - Introduce bitwise operator syntax highlighting, configure VS Code language server path, and update bitwise test file syntax.
 - Add comprehensive floating-point number support to the language, compiler, and runtime.
 - Implement a release script for automated builds and add build artifacts to gitignore.
+## [0.3.0](https://github.com/phamtanminhtien/aura/compare/v0.2.10...v0.3.0) (2026-03-17)
+
+
+### 🚀 Features
+
+* Add automated release management with Release Please. ([ac75f65](https://github.com/phamtanminhtien/aura/commit/ac75f6590a313399a55b7d729f80457bf1046de2))
+* Implement static class members and methods, including access, assignment, and calls. ([cb656a3](https://github.com/phamtanminhtien/aura/commit/cb656a3670cc2ad786cab200a540decdd3063d86))
+
+
+### 📚 Documentation
+
+* Add installation instructions to the README. ([1006341](https://github.com/phamtanminhtien/aura/commit/10063411433c84584db213f47a814cbd20f7c73d))
+* update changelog version headings to include GitHub compare links. ([33b2681](https://github.com/phamtanminhtien/aura/commit/33b2681c0a2333a2420ccb27f7de47596e1e4d0e))
+
+
+### ⚙️ Miscellaneous Tasks
+
+* Add pull request title pattern configuration to release-please. ([7fdb41b](https://github.com/phamtanminhtien/aura/commit/7fdb41baeac436d5a83626afc6871be8129f945b))
+* Remove '### ' prefix from changelog section headings in release-please-config. ([f7a65cb](https://github.com/phamtanminhtien/aura/commit/f7a65cb4254bc7011cc449b04bc46df3a5a1fdae))
+* Remove git-cliff configuration from Cargo.toml and delete cliff.toml. ([f60ae2f](https://github.com/phamtanminhtien/aura/commit/f60ae2f3ddabd5ffcfd5884d940cdb5149b36741))
+
 ## [0.2.9](https://github.com/phamtanminhtien/aura/compare/v0.2.8...v0.2.9) (2026-03-15)
 
 ### 🚀 Features
