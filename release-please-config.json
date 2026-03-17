@@ -10,18 +10,18 @@
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "changelog-sections": [
-        { "type": "feat", "section": "### 🚀 Features" },
-        { "type": "fix", "section": "### 🐛 Bug Fixes" },
-        { "type": "perf", "section": "### 🚀 Performance" },
-        { "type": "refactor", "section": "### 🚜 Refactor" },
-        { "type": "docs", "section": "### 📚 Documentation" },
-        { "type": "test", "section": "### 🧪 Testing" },
-        { "type": "chore", "section": "### ⚙️ Miscellaneous Tasks" },
-        { "type": "revert", "section": "### ◀️ Revert" },
-        { "type": "style", "section": "### 🎨 Styling" },
-        { "type": "ci", "section": "### ⚙️ Miscellaneous Tasks" },
-        { "type": "build", "section": "### ⚙️ Miscellaneous Tasks" },
-        { "type": "other", "section": "### 💼 Other" }
+        { "type": "feat", "section": "🚀 Features" },
+        { "type": "fix", "section": "🐛 Bug Fixes" },
+        { "type": "perf", "section": "🚀 Performance" },
+        { "type": "refactor", "section": "🚜 Refactor" },
+        { "type": "docs", "section": "📚 Documentation" },
+        { "type": "test", "section": "🧪 Testing" },
+        { "type": "chore", "section": "⚙️ Miscellaneous Tasks" },
+        { "type": "revert", "section": "◀️ Revert" },
+        { "type": "style", "section": "🎨 Styling" },
+        { "type": "ci", "section": "⚙️ Miscellaneous Tasks" },
+        { "type": "build", "section": "⚙️ Miscellaneous Tasks" },
+        { "type": "other", "section": "💼 Other" }
       ],
       "pull-request-title-pattern": "chore(release): v${version}"
     }
