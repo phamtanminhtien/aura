@@ -22,7 +22,8 @@
         { "type": "ci", "section": "### ⚙️ Miscellaneous Tasks" },
         { "type": "build", "section": "### ⚙️ Miscellaneous Tasks" },
         { "type": "other", "section": "### 💼 Other" }
-      ]
+      ],
+      "pull-request-title-pattern": "chore(release): v${version}"
     }
   },
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
