@@ -1,15 +1,27 @@
+#[cfg(not(target_arch = "wasm32"))]
 use aura::compiler::frontend::formatter::Formatter;
+#[cfg(not(target_arch = "wasm32"))]
 use aura::compiler::frontend::lexer::Lexer;
+#[cfg(not(target_arch = "wasm32"))]
 use aura::compiler::frontend::parser::Parser;
+#[cfg(not(target_arch = "wasm32"))]
 use aura::compiler::interp::Interpreter;
+#[cfg(not(target_arch = "wasm32"))]
 use aura::compiler::intrinsic::{register_analyzer_intrinsics, register_interpreter_intrinsics};
+#[cfg(not(target_arch = "wasm32"))]
 use aura::compiler::ir::lower::Lowerer;
+#[cfg(not(target_arch = "wasm32"))]
 use aura::compiler::ir::opt::Optimizer;
+#[cfg(not(target_arch = "wasm32"))]
 use aura::compiler::sema::checker::SemanticAnalyzer;
 
-// Import backends
+#[cfg(not(target_arch = "wasm32"))]
 use aura::compiler::backend::aarch64_apple_darwin;
 
+#[cfg(target_arch = "wasm32")]
+fn main() {}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn print_help() {
     println!("Aura Compiler");
     println!("");
@@ -35,10 +47,12 @@ fn print_help() {
     std::process::exit(0);
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn get_default_target() -> String {
     "aarch64-apple-darwin".to_string()
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
@@ -277,6 +291,7 @@ fn main() {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn handle_fmt_command(path_str: &str) {
     let path = std::path::Path::new(path_str);
     if path.is_file() {
@@ -291,6 +306,7 @@ fn handle_fmt_command(path_str: &str) {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn format_dir(dir: &std::path::Path) {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
@@ -310,6 +326,7 @@ fn format_dir(dir: &std::path::Path) {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn format_file(path: &std::path::Path) {
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
