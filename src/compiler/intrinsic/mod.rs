@@ -1,6 +1,9 @@
 pub mod array;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod date;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod fs;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod net;
 pub mod string;
 
@@ -10,10 +13,13 @@ use crate::compiler::sema::checker::SemanticAnalyzer;
 use crate::compiler::sema::ty::Type;
 
 pub fn register_interpreter_intrinsics(interp_env: &mut dyn FnMut(String, Value)) {
+    #[cfg(not(target_arch = "wasm32"))]
     fs::register_fs_intrinsics(interp_env);
     string::register_string_intrinsics(interp_env);
     array::register_array_intrinsics(interp_env);
+    #[cfg(not(target_arch = "wasm32"))]
     net::register_net_intrinsics(interp_env);
+    #[cfg(not(target_arch = "wasm32"))]
     date::register_date_intrinsics(interp_env);
 
     // Register common constants (macOS values for now)

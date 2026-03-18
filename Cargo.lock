@@ -101,6 +101,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tower-lsp",
+ "wasm-bindgen",
 ]
 
 [[package]]

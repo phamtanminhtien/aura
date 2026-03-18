@@ -25,6 +25,8 @@ pub struct Interpreter {
     pub env_stack: Vec<Rc<RefCell<HashMap<String, Value>>>>,
     pub stdlib_path: Option<String>,
     pub loaded_files: HashSet<String>,
+    /// Optional handler for `print` statements. If None, uses `println!`.
+    pub print_handler: Option<Rc<dyn Fn(&str)>>,
 }
 
 impl Interpreter {
@@ -37,6 +39,7 @@ impl Interpreter {
             env_stack: vec![Rc::new(RefCell::new(HashMap::new()))],
             stdlib_path: None,
             loaded_files: HashSet::new(),
+            print_handler: None,
         };
         // Register built-in Promise class (methods are handled as special cases in eval_expr)
         interp

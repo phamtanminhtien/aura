@@ -168,7 +168,11 @@ impl Interpreter {
                 if let Some(e) = self.pending_exception.take() {
                     return StatementResult::Throw(e);
                 }
-                println!("{}", s);
+                if let Some(ref handler) = self.print_handler {
+                    handler(&s);
+                } else {
+                    println!("{}", s);
+                }
                 StatementResult::None
             }
             Statement::If {
