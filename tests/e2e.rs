@@ -235,6 +235,7 @@ e2e_test!(oop_interface_multi, "04_oop/10_interface_multi.aura");
 e2e_test!(oop_static_members, "04_oop/11_static_members.aura");
 e2e_test!(oop_generics_basic, "04_oop/12_generics_basic.aura");
 e2e_test!(oop_generics_complex, "04_oop/13_generics_complex.aura");
+e2e_test!(oop_print_object, "04_oop/14_print_object.aura");
 
 // --- 05_enums ---
 e2e_test!(enum_numeric, "05_enums/01_numeric.aura");
