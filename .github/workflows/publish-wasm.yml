@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -43,13 +44,13 @@ jobs:
         run: |
           cd website/src/wasm
           # Use jq to update name to be scoped for GitHub Packages and set publishConfig
-          jq '.name = "@auraspace/aura" | .publishConfig = {"registry": "https://npm.pkg.github.com"}' package.json > package.json.tmp
+          jq '.name = "@auraspace/aura" | .publishConfig = {"registry": "https://npm.pkg.github.com", "access": "public"}' package.json > package.json.tmp
           mv package.json.tmp package.json
           cat package.json
 
       - name: Publish to GitHub Packages
         run: |
           cd website/src/wasm
-          npm publish
+          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
