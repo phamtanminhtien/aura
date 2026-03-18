@@ -465,3 +465,8 @@ void print_bool(int64_t n) {
   printf("%s\n", n ? "true" : "false");
   fflush(stdout);
 }
+
+void print_object_default(const char *class_name) {
+  printf("<Instance of %s>\n", class_name);
+  fflush(stdout);
+}

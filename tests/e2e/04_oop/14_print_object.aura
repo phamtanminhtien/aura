@@ -1,0 +1,20 @@
+// Expected output:
+// Person
+// <Instance of Animal>
+
+class Person {
+  public toString(): string {
+    return "Person";
+  }
+}
+
+class Animal {
+  public constructor() {
+  }
+}
+
+let p = new Person();
+print p;
+
+let a = new Animal();
+print a;

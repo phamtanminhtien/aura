@@ -177,6 +177,10 @@ impl Codegen {
                     }
                 }
                 let node_ty = self.get_node_type(&expr.span());
+                let mut specialized_class_name = None;
+                let mut has_to_string = false;
+                let mut class_name_for_default = None;
+
                 if let Some(ty) = node_ty {
                     let actual_ty = self.get_specialized_type(&ty);
                     match actual_ty {
@@ -190,12 +194,30 @@ impl Codegen {
                                 is_str = true;
                             }
                         }
+                        Type::Class(ref name) => {
+                            class_name_for_default = Some(name.clone());
+                            if self.has_method(name, "toString") {
+                                has_to_string = true;
+                                specialized_class_name = Some(name.clone());
+                            }
+                        }
+                        Type::Generic(ref name, ref args) => {
+                            let mangled = self.mangle_name(name, args);
+                            class_name_for_default = Some(mangled.clone());
+                            if self.has_method(&mangled, "toString") {
+                                has_to_string = true;
+                                specialized_class_name = Some(mangled);
+                            } else if self.has_method(name, "toString") {
+                                has_to_string = true;
+                                specialized_class_name = Some(name.clone());
+                            }
+                        }
                         _ => {}
                     }
                 }
 
                 // Check if this is a string-backed enum variable
-                if !is_str {
+                if !is_str && !has_to_string {
                     let enum_name: Option<String> = if let Expr::Variable(ref var_name, _) = expr {
                         let local_ty = self.variables.get(var_name).map(|(_, t)| t.clone());
                         let ty = local_ty.or_else(|| {
@@ -222,7 +244,7 @@ impl Codegen {
                     }
                 }
 
-                if !is_str && !is_bool && !is_array && !is_promise && !is_null {
+                if !is_str && !is_bool && !is_array && !is_promise && !is_null && !has_to_string {
                     match &expr {
                         Expr::StringLiteral(_, _) => is_str = true,
                         Expr::BinaryOp(ref left, ref op, ref right, _) if op == "+" => {
@@ -257,6 +279,12 @@ impl Codegen {
                 self.generate_expr(expr);
                 if is_str {
                     self.emitter.call("_print_str");
+                } else if has_to_string {
+                    if let Some(class_name) = specialized_class_name {
+                        self.emitter
+                            .call(&format!("_{}_{}", class_name, "toString"));
+                        self.emitter.call("_print_str");
+                    }
                 } else if is_bool {
                     self.emitter.call("_print_bool");
                 } else if is_array {
@@ -268,6 +296,21 @@ impl Codegen {
                 } else if is_float {
                     self.emitter.output.push_str("    fmov d0, x0\n");
                     self.emitter.call("_print_float");
+                } else if let Some(class_name) = class_name_for_default {
+                    let label = if let Some(l) = self.string_constants.get(&class_name) {
+                        l.clone()
+                    } else {
+                        let l = format!("_s{}", self.string_constants.len());
+                        self.string_constants.insert(class_name.clone(), l.clone());
+                        l
+                    };
+                    self.emitter
+                        .output
+                        .push_str(&format!("    adrp x0, {}@PAGE\n", label));
+                    self.emitter
+                        .output
+                        .push_str(&format!("    add x0, x0, {}@PAGEOFF\n", label));
+                    self.emitter.call("_print_object_default");
                 } else {
                     self.emitter.call("_print_num");
                 }

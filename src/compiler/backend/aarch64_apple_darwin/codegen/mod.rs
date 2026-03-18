@@ -152,6 +152,24 @@ impl Codegen {
         }
     }
 
+    pub fn has_method(&self, class_name: &str, method_name: &str) -> bool {
+        if let Some((_fields, methods)) = self.classes.get(class_name) {
+            if methods.iter().any(|m| m == method_name) {
+                return true;
+            }
+        }
+        // Also check if it's a specialized name
+        if let Some((ref base_name, ref args)) = self.current_specialization {
+            let mangled = self.mangle_name(base_name, args);
+            if mangled == class_name {
+                if let Some((_, methods)) = self.classes.get(base_name) {
+                    return methods.iter().any(|m| m == method_name);
+                }
+            }
+        }
+        false
+    }
+
     fn store_local(&mut self, reg: &str, offset: usize) {
         if offset <= 255 {
             self.emitter
