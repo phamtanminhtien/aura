@@ -12,6 +12,8 @@ jobs:
   build:
     name: Build binaries
     runs-on: ${{ matrix.os }}
+    outputs:
+      changelog: ${{ steps.extract_changelog.outputs.body }}
     strategy:
       fail-fast: false
       matrix:
@@ -60,6 +62,18 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+      - name: Extract Latest Changelog
+        id: extract_changelog
+        run: |
+          # Extract content between the first two '## [' markers
+          awk '/^## \[/{if (count++) exit; next} count' CHANGELOG.md > latest_changelog.md
+          # Set as output for the next step
+          {
+            echo 'body<<EOF'
+            cat latest_changelog.md
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
   release:
     name: GitHub Release
     needs: build
@@ -76,5 +90,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          body: ${{  needs.build.outputs.changelog }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
