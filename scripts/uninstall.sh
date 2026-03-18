@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Aura Uninstallation Script
-# https://github.com/phamtanminhtien/aura
+# https://github.com/auraspace/aura
 
 INSTALL_DIR="$HOME/.aura"
 

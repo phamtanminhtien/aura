@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Aura Installation Script
-# https://github.com/phamtanminhtien/aura
+# https://github.com/auraspace/aura
 
 set -e
 
-REPO_URL="https://github.com/phamtanminhtien/aura"
+REPO_URL="https://github.com/auraspace/aura"
 VERSION="${1:-latest}"
 INSTALL_DIR="$HOME/.aura"
 
@@ -38,7 +38,7 @@ TARGET="aura-${OS}-${ARCH}"
 # 2. Get the actual version if "latest"
 if [ "$VERSION" = "latest" ]; then
     echo "Checking for latest version..."
-    VERSION=$(curl -s https://api.github.com/repos/phamtanminhtien/aura/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    VERSION=$(curl -s https://api.github.com/repos/auraspace/aura/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     if [ -z "$VERSION" ]; then
         echo "Error: Could not determine latest version. Please specify a version tag (e.g., v0.1.0)."
         exit 1
