@@ -1,9 +1,19 @@
+## [0.2.15] - 2026-03-19
+
+### 🚀 Features
+
+- Add `of` keyword to syntax highlighting, implement `for` and `for-of` loop e2e tests,
+- Implement AARCH64 backend support for `for` and `for-of` loops, refactor global variable collection, and add new test binaries.
 ## [0.2.14] - 2026-03-19
 
 ### 🚀 Features
 
 - Implement generic array functions and enhance type error handling by replacing `Type::Unknown` with `Type::Error`.
 - Implement for and for...of loops (fixes #58)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V0.2.14
 ## [0.2.13] - 2026-03-19
 
 ### 🚀 Features
