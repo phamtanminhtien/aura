@@ -1,3 +1,25 @@
+## [0.2.13] - 2026-03-19
+
+### 🚀 Features
+
+- Update default branch name from `master` to `main` in CI workflow and installation instructions.
+- Introduce WebAssembly (WASM) backend with `wasm-bindgen` integration, a build script, and interpreter adaptations for browser execution.
+- Add GitHub Actions workflow to build and publish WASM to GitHub Packages on version tags.
+- Add GitHub Actions workflow to build and publish WASM to GitHub Packages on version tags.
+- Initialize Docusaurus website with basic structure and content.
+- Initialize Docusaurus website with comprehensive documentation and migrate configuration to.
+- Add Aura syntax highlighting for Prism and Monaco editors, and update documentation code examples to reflect `print` statement syntax.
+- Integrate the Aura WASM compiler into the playground for live code execution and add `.npmrc` to `.gitignore`.
+- Update favicon and base URL paths, and add an announcement bar
+
+### 🐛 Bug Fixes
+
+- Configure Docusaurus to warn on broken links and update all introduction paths to `/docs/introduction`.
+
+### ⚙️ Miscellaneous Tasks
+
+- Update repository URLs to auraspace/aura and remove refactor_issues.md.
+- Add GitHub Actions workflow for website deployment and configure Docusaurus to disable trailing slashes.
 ## [0.2.12] - 2026-03-18
 
 ### 🚀 Features
@@ -17,6 +39,7 @@
 
 - Remove `ir` argument from `oop_inheritance` e2e test.
 - Automatically extract and use the latest changelog entry as GitHub release notes in the release script and workflow.
+- *(release)* V0.2.12
 ## [0.2.11] - 2026-03-17
 
 ### 🚀 Features
