@@ -1,9 +1,24 @@
+## [0.2.16] - 2026-03-20
+
+### 🚀 Features
+
+- Add WASM testing infrastructure with a Node.js runner, initial test cases, and integrate it into the CI pipeline.
+- Add screenshot to README and refine website layout and responsiveness.
+- Make semicolons optional in Aura
+
+### 🚜 Refactor
+
+- Overhaul WASM test suite with new structured cases, add test filtering, and integrate WASM tests into CI, along with registering core interpreter constants.
 ## [0.2.15] - 2026-03-19
 
 ### 🚀 Features
 
 - Add `of` keyword to syntax highlighting, implement `for` and `for-of` loop e2e tests,
 - Implement AARCH64 backend support for `for` and `for-of` loops, refactor global variable collection, and add new test binaries.
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V0.2.15
 ## [0.2.14] - 2026-03-19
 
 ### 🚀 Features
