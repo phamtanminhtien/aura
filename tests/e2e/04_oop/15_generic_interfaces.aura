@@ -1,0 +1,71 @@
+// Expected output:
+// Box value: 42
+// Transformer result: 123
+// Pair: key=Hello, value=true
+// Pair: key=100, value=Aura
+
+interface Container<T> {
+  set(value: T): void;
+  get(): T;
+}
+
+class Box<T> implements Container<T> {
+  private value: T;
+
+  public constructor(value: T) {
+    this.value = value;
+  }
+
+  public set(value: T): void {
+    this.value = value;
+  }
+
+  public get(): T {
+    return this.value;
+  }
+}
+
+interface Transformer<T, U> {
+  transform(input: T): U;
+}
+
+class StringToIntTransformer implements Transformer<string, i32> {
+  public transform(input: string): i32 {
+    // In Aura, we might need a built-in for string to int if it's not supported yet
+    // For now, let's assume it works or use a simpler test if it doesn't
+    return 123; 
+  }
+}
+
+interface Pair<K, V> {
+  getKey(): K;
+  getValue(): V;
+}
+
+class MyPair<K, V> implements Pair<K, V> {
+  private key: K;
+  private value: V;
+
+  public constructor(key: K, value: V) {
+    this.key = key;
+    this.value = value;
+  }
+
+  public getKey(): K { return this.key; }
+  public getValue(): V { return this.value; }
+}
+
+// 1. Test Box<T>
+let box: Container<i32> = new Box<i32>(42);
+print "Box value: " + box.get();
+
+// 2. Test StringToIntTransformer
+let t: Transformer<string, i32> = new StringToIntTransformer();
+print "Transformer result: " + t.transform("magic");
+
+// 3. Test MyPair<K, V>
+let p1: Pair<string, bool> = new MyPair<string, bool>("Hello", true);
+print "Pair: key=" + p1.getKey() + ", value=" + p1.getValue();
+
+let p2: Pair<i32, string> = new MyPair<i32, string>(100, "Aura");
+print "Pair: key=" + p2.getKey() + ", value=" + p2.getValue();
