@@ -754,8 +754,10 @@ impl SemanticAnalyzer {
             (Type::Array(s), Type::Array(t)) => self.is_assignable_internal(s, t, history),
 
             // Generic types (Nominal for now, e.g. Box<i32> vs Box<i32>)
-            (Type::Generic(src_name, src_args), Type::Generic(tgt_name, tgt_args)) => {
-                if src_name != tgt_name || src_args.len() != tgt_args.len() {
+            (Type::Generic(src_name, src_args), Type::Generic(tgt_name, tgt_args))
+                if src_name == tgt_name =>
+            {
+                if src_args.len() != tgt_args.len() {
                     return false;
                 }
                 for (s, t) in src_args.iter().zip(tgt_args.iter()) {
@@ -767,70 +769,130 @@ impl SemanticAnalyzer {
             }
 
             // Interface structural typing
-            (src_ty, Type::Class(tgt_name)) if self.interfaces.contains_key(tgt_name) => {
+            (src_ty, target_ty)
+                if {
+                    if let Type::Class(n) | Type::Generic(n, _) = target_ty {
+                        self.interfaces.contains_key(n)
+                    } else {
+                        false
+                    }
+                } =>
+            {
+                let (tgt_name, tgt_args) = match target_ty {
+                    Type::Class(n) => (n, &[][..]),
+                    Type::Generic(n, args) => (n, args.as_slice()),
+                    _ => unreachable!(),
+                };
                 let tgt_iface = self.interfaces.get(tgt_name).unwrap().clone();
+                let tgt_mapping = self.get_substitution_mapping(&tgt_iface.type_params, tgt_args);
 
                 // Get source structure (either class or interface)
-                let (src_fields, src_methods) =
-                    if let Type::Class(src_name) | Type::Generic(src_name, _) = src_ty {
-                        if let Some(src_class) = self.classes.get(src_name) {
-                            (
-                                Some(src_class.fields.clone()),
-                                Some(src_class.methods.clone()),
-                            )
-                        } else if let Some(src_iface) = self.interfaces.get(src_name) {
-                            (
-                                Some(src_iface.fields.clone()),
-                                Some(src_iface.methods.clone()),
-                            )
-                        } else {
-                            (None, None)
-                        }
+                let (src_name, src_args) = match src_ty {
+                    Type::Class(n) => (Some(n), &[][..]),
+                    Type::Generic(n, args) => (Some(n), args.as_slice()),
+                    _ => (None, &[][..]),
+                };
+
+                if let Some(s_name) = src_name {
+                    let src_info = if let Some(src_class) = self.classes.get(s_name) {
+                        Some((
+                            src_class.fields.clone(),
+                            src_class.methods.clone(),
+                            src_class.type_params.clone(),
+                        ))
+                    } else if let Some(src_iface) = self.interfaces.get(s_name) {
+                        Some((
+                            src_iface.fields.clone(),
+                            src_iface.methods.clone(),
+                            src_iface.type_params.clone(),
+                        ))
                     } else {
-                        (None, None)
+                        None
                     };
 
-                if let (Some(fields), Some(methods)) = (src_fields, src_methods) {
-                    // Check fields
-                    for (name, tgt_f) in &tgt_iface.fields {
-                        if let Some(src_f) = fields.get(name) {
-                            if !self.is_assignable_internal(&src_f.ty, &tgt_f.ty, history) {
-                                return false;
-                            }
-                        } else {
-                            return false;
-                        }
-                    }
-                    // Check methods
-                    for (name, tgt_m) in &tgt_iface.methods {
-                        if let Some(src_m) = methods.get(name) {
-                            if src_m.params.len() != tgt_m.params.len() {
-                                return false;
-                            }
-                            for (p1, p2) in src_m.params.iter().zip(tgt_m.params.iter()) {
-                                if !self.is_assignable_internal(p2, p1, history) {
+                    if let Some((fields, methods, s_type_params)) = src_info {
+                        let src_mapping = self.get_substitution_mapping(&s_type_params, src_args);
+
+                        // Check fields
+                        for (fname, tgt_f) in &tgt_iface.fields {
+                            if let Some(src_f) = fields.get(fname) {
+                                let expected_ty = self.substitute(&tgt_f.ty, &tgt_mapping);
+                                let actual_ty = self.substitute(&src_f.ty, &src_mapping);
+                                if !self.is_assignable_internal(&actual_ty, &expected_ty, history) {
                                     return false;
                                 }
-                            }
-                            if !self.is_assignable_internal(&src_m.ret_ty, &tgt_m.ret_ty, history) {
+                            } else {
                                 return false;
                             }
-                        } else {
-                            return false;
                         }
+                        // Check methods
+                        for (mname, tgt_m) in &tgt_iface.methods {
+                            if let Some(src_m) = methods.get(mname) {
+                                if src_m.params.len() != tgt_m.params.len() {
+                                    return false;
+                                }
+                                for (p_src, p_tgt) in src_m.params.iter().zip(tgt_m.params.iter()) {
+                                    let expected_p = self.substitute(p_tgt, &tgt_mapping);
+                                    let actual_p = self.substitute(p_src, &src_mapping);
+                                    // Parameters are contravariant, but for interfaces usually exact match.
+                                    // Use is_assignable for flexibility.
+                                    if !self.is_assignable_internal(&expected_p, &actual_p, history)
+                                    {
+                                        return false;
+                                    }
+                                }
+                                let expected_ret = self.substitute(&tgt_m.ret_ty, &tgt_mapping);
+                                let actual_ret = self.substitute(&src_m.ret_ty, &src_mapping);
+                                // Return type is covariant
+                                if !self.is_assignable_internal(&actual_ret, &expected_ret, history)
+                                {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
+                        }
+                        return true;
                     }
-                    true
-                } else {
-                    false
                 }
+                false
             }
 
             // Nominal inheritance
-            (src, Type::Class(tgt_name)) => {
+            (src, target_ty)
+                if match target_ty {
+                    Type::Class(_) | Type::Generic(_, _) => true,
+                    _ => false,
+                } =>
+            {
+                let tgt_name = match target_ty {
+                    Type::Class(n) => n,
+                    Type::Generic(n, _) => n,
+                    _ => unreachable!(),
+                };
                 let mut current_ty = src.clone();
                 while let Type::Class(ref name) | Type::Generic(ref name, _) = current_ty {
                     if name == tgt_name {
-                        return true;
+                        if let Type::Generic(_, tgt_args) = target_ty {
+                            if let Type::Generic(_, src_args) = &current_ty {
+                                if src_args.len() == tgt_args.len() {
+                                    let mut args_match = true;
+                                    for (s, t) in src_args.iter().zip(tgt_args.iter()) {
+                                        if !self.is_assignable_internal(s, t, history) {
+                                            args_match = false;
+                                            break;
+                                        }
+                                    }
+                                    if args_match {
+                                        return true;
+                                    }
+                                }
+                            } else {
+                                return false;
+                            }
+                        } else {
+                            return true;
+                        }
                     }
 
                     let class_info_opt = self.classes.get(name).cloned();
@@ -1288,6 +1350,22 @@ impl SemanticAnalyzer {
         let class_names: Vec<String> = self.classes.keys().cloned().collect();
         for name in class_names {
             let info = self.classes.get(&name).unwrap().clone();
+
+            // Push class scope to resolve type parameters in 'implements' correctly
+            self.push_scope();
+            for tp in &info.type_params {
+                self.scope.insert(
+                    tp.name.clone(),
+                    Type::GenericParam(tp.name.clone()),
+                    false,
+                    true,
+                    false,
+                    tp.span,
+                    self.current_file.clone(),
+                    None,
+                );
+            }
+
             for iface_expr in &info.implements {
                 let iface_name = match iface_expr {
                     crate::compiler::ast::TypeExpr::Name(n, _) => n.clone(),
@@ -1336,7 +1414,10 @@ impl SemanticAnalyzer {
                             if compatible {
                                 for (p1, p2) in cm_info.params.iter().zip(m_info.params.iter()) {
                                     let expected_p2 = self.substitute(p2, &mapping);
-                                    if p1 != &expected_p2 {
+                                    // Use is_assignable for better flexibility and correctness with generics
+                                    if !self.is_assignable(p1, &expected_p2)
+                                        || !self.is_assignable(&expected_p2, p1)
+                                    {
                                         compatible = false;
                                         break;
                                     }
@@ -1344,7 +1425,7 @@ impl SemanticAnalyzer {
                             }
                             if compatible {
                                 let expected_ret = self.substitute(&m_info.ret_ty, &mapping);
-                                if cm_info.ret_ty != expected_ret {
+                                if !self.is_assignable(&cm_info.ret_ty, &expected_ret) {
                                     compatible = false;
                                 }
                             }
@@ -1376,6 +1457,7 @@ impl SemanticAnalyzer {
                     );
                 }
             }
+            self.pop_scope();
         }
     }
 
