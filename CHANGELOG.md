@@ -1,3 +1,8 @@
+## [0.2.17] - 2026-03-21
+
+### 🚀 Features
+
+- Implement union types with type narrowing, aliasing, and AArch64 codegen for type tests.
 ## [0.2.16] - 2026-03-20
 
 ### 🚀 Features
@@ -9,6 +14,10 @@
 ### 🚜 Refactor
 
 - Overhaul WASM test suite with new structured cases, add test filtering, and integrate WASM tests into CI, along with registering core interpreter constants.
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V0.2.16
 ## [0.2.15] - 2026-03-19
 
 ### 🚀 Features
