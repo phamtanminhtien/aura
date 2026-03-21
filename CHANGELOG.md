@@ -1,8 +1,18 @@
+## [0.2.18] - 2026-03-21
+
+### 🚀 Features
+
+- Enhance install script with colored logging, improved error handling, and update detection.
+- Implement generic interfaces and enhance assignability checks for generic types.
 ## [0.2.17] - 2026-03-21
 
 ### 🚀 Features
 
 - Implement union types with type narrowing, aliasing, and AArch64 codegen for type tests.
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V0.2.17
 ## [0.2.16] - 2026-03-20
 
 ### 🚀 Features
