@@ -863,6 +863,25 @@ impl Codegen {
                 self.generate_expr(*expr);
                 self.emitter.call("_aura_throw");
             }
+            Expr::Ternary(cond, truthy, falsy, _) => {
+                self.generate_expr(*cond);
+                self.emitter.output.push_str("    cmp x0, #0\n");
+                let false_lbl = self.new_label("ternary_false");
+                let merge_lbl = self.new_label("ternary_merge");
+                self.emitter
+                    .output
+                    .push_str(&format!("    b.eq {}\n", false_lbl));
+
+                self.generate_expr(*truthy);
+                self.emitter
+                    .output
+                    .push_str(&format!("    b {}\n", merge_lbl));
+
+                self.emitter.output.push_str(&format!("{}:\n", false_lbl));
+                self.generate_expr(*falsy);
+
+                self.emitter.output.push_str(&format!("{}:\n", merge_lbl));
+            }
             Expr::Index(obj, index, _) => {
                 self.generate_expr(*obj);
                 self.emitter.push(AsmRegister::X0);

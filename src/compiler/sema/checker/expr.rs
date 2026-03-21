@@ -680,6 +680,32 @@ impl SemanticAnalyzer {
                 }
                 Type::Boolean
             }
+            Expr::Ternary(cond, truthy, falsy, span) => {
+                let cond_ty = self.check_expr(*cond);
+                if cond_ty != Type::Boolean && cond_ty != Type::Error {
+                    self.error(
+                        SemanticErrorKind::TypeMismatch(
+                            "boolean".to_string(),
+                            format!("{}", cond_ty),
+                        ),
+                        span,
+                    );
+                }
+                let true_ty = self.check_expr(*truthy);
+                let false_ty = self.check_expr(*falsy);
+
+                let combined_ty = if true_ty == false_ty {
+                    true_ty
+                } else if true_ty.is_float() && false_ty.is_integer() {
+                    true_ty
+                } else if false_ty.is_float() && true_ty.is_integer() {
+                    false_ty
+                } else {
+                    Type::Union(vec![true_ty, false_ty])
+                };
+
+                combined_ty
+            }
             Expr::Throw(expr, span) => {
                 let expr_ty = self.check_expr(*expr);
                 let error_ty = Type::Class("Error".to_string());

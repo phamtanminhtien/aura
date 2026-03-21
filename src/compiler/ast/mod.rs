@@ -87,6 +87,7 @@ pub enum Expr {
     UnaryOp(String, Box<Expr>, Span),
     Throw(Box<Expr>, Span),
     TypeTest(Box<Expr>, TypeExpr, Span),
+    Ternary(Box<Expr>, Box<Expr>, Box<Expr>, Span),
     /// Template literal: `` `Hello, ${name}!` ``
     /// Parts are alternating Str / Expr segments.
     Template(Vec<TemplatePart>, Span),
@@ -125,6 +126,7 @@ impl Expr {
             Expr::UnaryOp(_, _, s) => *s,
             Expr::Throw(_, s) => *s,
             Expr::TypeTest(_, _, s) => *s,
+            Expr::Ternary(_, _, _, s) => *s,
             Expr::Template(_, s) => *s,
             Expr::Await(_, s) => *s,
             Expr::ArrayLiteral(_, s) => *s,

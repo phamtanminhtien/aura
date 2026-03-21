@@ -262,6 +262,10 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 TokenKind::Percent
             }
+            '?' => {
+                self.advance();
+                TokenKind::Question
+            }
             '"' => self.lex_string().kind,
             '`' => self.lex_template_literal().kind,
             _ if ch.is_ascii_digit() => self.lex_number().kind,

@@ -953,6 +953,14 @@ impl Interpreter {
                 // Not fully supported in interpreter yet, but needs to be exhaustive
                 Value::Void
             }
+            Expr::Ternary(cond, truthy, falsy, _) => {
+                let cond_val = self.eval_expr(*cond);
+                if cond_val.is_truthy() {
+                    self.eval_expr(*truthy)
+                } else {
+                    self.eval_expr(*falsy)
+                }
+            }
             Expr::Error(_) => panic!("Compiler bug: reaching error node in interpreter"),
         }
     }

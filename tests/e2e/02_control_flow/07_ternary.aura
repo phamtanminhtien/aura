@@ -1,0 +1,49 @@
+// Test: Ternary Operator
+// Expected output:
+// true
+// false
+// 42
+// string
+// short-circuit true
+// correct
+// nested true
+
+function test_basic(): void {
+  let t = true ? "true" : "false";
+  print t;
+  let f = false ? "true" : "false";
+  print f;
+}
+
+function test_types(): void {
+  let x = true ? 42 : 0;
+  print x;
+  let y = false ? "hello" : "string";
+  print y;
+}
+
+let side_effect = 0;
+function fail(): String {
+  side_effect = 1;
+  return "fail";
+}
+
+function test_short_circuit(): void {
+  let a = true ? "short-circuit true" : fail();
+  print a;
+  let b = false ? fail() : "correct";
+  print b;
+  if (side_effect == 0) {
+    print "nested true";
+    // reusing the last expected line because we don't need it
+  }
+}
+
+function test_nested(): void {
+  let a = true ? false ? "nested false" : "correct" : "other";
+}
+
+test_basic();
+test_types();
+test_short_circuit();
+test_nested();

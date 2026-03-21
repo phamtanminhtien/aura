@@ -145,6 +145,13 @@ pub(crate) fn format_expr(f: &mut Formatter, expr: &Expr) {
             f.result.push_str(" is ");
             f.format_type_expr(ty);
         }
+        Expr::Ternary(cond, truthy, falsy, _) => {
+            format_expr(f, cond);
+            f.result.push_str(" ? ");
+            format_expr(f, truthy);
+            f.result.push_str(" : ");
+            format_expr(f, falsy);
+        }
         Expr::Template(parts, _) => {
             f.result.push('`');
             for part in parts {
@@ -207,6 +214,7 @@ fn get_expr_precedence(expr: &Expr) -> i32 {
     match expr {
         Expr::BinaryOp(_, op, _, _) => get_precedence(op),
         Expr::Assign(_, _, _) => 2,
+        Expr::Ternary(_, _, _, _) => 3, // Right above assignment
         Expr::TypeTest(_, _, _) => 10,
         Expr::UnaryOp(_, _, _) => 13, // Unary is stronger than binary
         Expr::Call(_, _, _, _, _)

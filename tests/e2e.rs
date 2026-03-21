@@ -217,6 +217,7 @@ e2e_test!(flow_mutation, "02_control_flow/03_mutation.aura");
 e2e_test!(flow_loop_sum, "02_control_flow/04_loop_sum.aura");
 e2e_test!(flow_for_loop, "02_control_flow/05_for_loop.aura");
 e2e_test!(flow_for_of_loop, "02_control_flow/06_for_of_loop.aura");
+e2e_test!(flow_ternary, "02_control_flow/07_ternary.aura");
 
 // --- 03_functions ---
 e2e_test!(fn_basic, "03_functions/01_basic.aura");

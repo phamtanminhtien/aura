@@ -87,6 +87,7 @@ pub enum TokenKind {
     CloseBrace,   // }
     OpenBracket,  // [
     CloseBracket, // ]
+    Question,     // ?
 
     // End of file
     EOF,

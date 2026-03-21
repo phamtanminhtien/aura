@@ -6,7 +6,7 @@ use crate::compiler::frontend::token::TokenKind;
 impl Parser {
     pub(crate) fn parse_expression(&mut self) -> Expr {
         let s = self.span();
-        let node = self.parse_logical_or();
+        let node = self.parse_ternary();
 
         if self.peek().kind == TokenKind::Equal {
             self.advance();
@@ -28,6 +28,19 @@ impl Parser {
             }
         }
 
+        node
+    }
+
+    pub(crate) fn parse_ternary(&mut self) -> Expr {
+        let mut node = self.parse_logical_or();
+        if self.peek().kind == TokenKind::Question {
+            let s = self.span();
+            self.advance();
+            let true_expr = self.parse_expression();
+            let _ = self.consume(TokenKind::Colon);
+            let false_expr = self.parse_ternary();
+            node = Expr::Ternary(Box::new(node), Box::new(true_expr), Box::new(false_expr), s);
+        }
         node
     }
 

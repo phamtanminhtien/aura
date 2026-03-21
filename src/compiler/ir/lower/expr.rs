@@ -675,6 +675,49 @@ impl Lowerer {
                     res
                 }
             }
+            Expr::Ternary(cond, truthy, falsy, _) => {
+                let cond_op = self.lower_expr(*cond);
+                let true_lbl = self.builder.new_label("ternary_true");
+                let false_lbl = self.builder.new_label("ternary_false");
+                let merge_lbl = self.builder.new_label("ternary_merge");
+
+                let result_ptr = self.builder.salloc(16); // Support up to union size
+
+                self.builder
+                    .branch(cond_op, true_lbl.clone(), false_lbl.clone());
+
+                // True branch
+                self.builder.set_block(true_lbl);
+                let true_op = self.lower_expr(*truthy);
+                let true_ty = self.last_expr_ty.clone();
+                self.builder.store(true_op, result_ptr.clone(), 0);
+                self.builder.jump(merge_lbl.clone());
+
+                // False branch
+                self.builder.set_block(false_lbl);
+                let false_op = self.lower_expr(*falsy);
+                let false_ty = self.last_expr_ty.clone();
+                // Simple float promotion handled via codegen usually, here we just store
+                self.builder.store(false_op, result_ptr.clone(), 0);
+                self.builder.jump(merge_lbl.clone());
+
+                // Merge block
+                self.builder.set_block(merge_lbl);
+                let res = self.builder.load(result_ptr, 0);
+
+                let combined_ty = if true_ty == false_ty {
+                    true_ty
+                } else if true_ty.is_float() && false_ty.is_integer() {
+                    Type::Float64
+                } else if false_ty.is_float() && true_ty.is_integer() {
+                    Type::Float64
+                } else {
+                    Type::Union(vec![true_ty, false_ty])
+                };
+                self.last_expr_ty = combined_ty;
+
+                res
+            }
             Expr::Throw(expr, _) => {
                 let val = self.lower_expr(*expr);
                 self.builder.call("aura_throw".to_string(), vec![val]);
