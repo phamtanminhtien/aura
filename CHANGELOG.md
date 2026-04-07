@@ -1,9 +1,18 @@
+## [0.2.20] - 2026-04-07
+
+### 🚀 Features
+
+- Implement first-class functions and indirect calls by adding CallIndirect and LoadFunctionAddress instructions
 ## [0.2.19] - 2026-03-21
 
 ### 🚀 Features
 
 - Implement standard library collections with improved module resolution, string comparison in codegen, and `export import` formatting.
 - Introduce ternary operator with comprehensive compiler support and end-to-end testing.
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V0.2.19
 ## [0.2.18] - 2026-03-21
 
 ### 🚀 Features
