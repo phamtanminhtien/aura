@@ -141,6 +141,8 @@ impl IrCodegen {
                     | Instruction::CallVirtual(d, _, _, _)
                     | Instruction::IToF(d, _)
                     | Instruction::LoadVTableAddress(d, _)
+                    | Instruction::CallIndirect(d, _, _)
+                    | Instruction::LoadFunctionAddress(d, _)
                     | Instruction::FToI(d, _) => Some(*d),
                     _ => None,
                 };
@@ -512,6 +514,21 @@ impl IrCodegen {
                 self.load_operand(Register::D0, src);
                 self.emitter.fcvtzs(Register::X16, Register::D0);
                 self.store_reg(dest, Register::X16);
+            }
+            Instruction::CallIndirect(dest, func_ptr, args) => {
+                for (i, arg) in args.iter().enumerate() {
+                    if i < 8 {
+                        self.load_operand(Register::from_u8(i as u8), arg.clone());
+                    }
+                }
+                self.load_operand(Register::X16, func_ptr);
+                self.emitter.blr(Register::X16);
+                self.store_reg(dest, Register::X0);
+            }
+            Instruction::LoadFunctionAddress(dest, name) => {
+                self.emitter
+                    .load_label(Register::X17, &format!("_{}", name));
+                self.store_reg(dest, Register::X17);
             }
         }
     }

@@ -345,6 +345,28 @@ impl SemanticAnalyzer {
             None,
         );
 
+        // Register built-in functions
+        analyzer.scope.insert(
+            "print_i32".to_string(),
+            Type::Function(vec![], vec![Type::Int32], Box::new(Type::Void)),
+            false,
+            true,
+            true,
+            Span::new(0, 0),
+            "".to_string(),
+            None,
+        );
+        analyzer.scope.insert(
+            "print_f64".to_string(),
+            Type::Function(vec![], vec![Type::Float64], Box::new(Type::Void)),
+            false,
+            true,
+            true,
+            Span::new(0, 0),
+            "".to_string(),
+            None,
+        );
+
         analyzer
     }
 

@@ -1,0 +1,39 @@
+// Expected output:
+// 15
+// 5
+// 50
+// 2
+
+function add(a: i32, b: i32): i32 {
+    return a + b;
+}
+
+function sub(a: i32, b: i32): i32 {
+    return a - b;
+}
+
+function apply(op: function(i32, i32): i32, x: i32, y: i32): i32 {
+    return op(x, y);
+}
+
+function main() {
+    let x = 10;
+    let y = 5;
+
+    // Test 1: Passing global function as callback
+    let r1 = apply(add, x, y);
+    print_i32(r1); // Expected: 15
+
+    let r2 = apply(sub, x, y);
+    print_i32(r2); // Expected: 5
+
+    // Test 2: Anonymous function (lambda)
+    let mul = function(a: i32, b: i32): i32 {
+        return a * b;
+    };
+    let r3 = apply(mul, x, y);
+    print_i32(r3); // Expected: 50
+
+    // Test 3: Inline lambda
+    print_i32(apply(function(a: i32, b: i32): i32 { return a / b; }, x, y)); // Expected: 2
+}

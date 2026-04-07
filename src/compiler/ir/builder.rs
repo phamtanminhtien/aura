@@ -241,6 +241,18 @@ impl IrBuilder {
         Operand::Value(dest)
     }
 
+    pub fn call_indirect(&mut self, func_ptr: Operand, args: Vec<Operand>) -> Operand {
+        let dest = self.new_reg();
+        self.emit(Instruction::CallIndirect(dest, func_ptr, args));
+        Operand::Value(dest)
+    }
+
+    pub fn load_func_addr(&mut self, func_name: String) -> Operand {
+        let dest = self.new_reg();
+        self.emit(Instruction::LoadFunctionAddress(dest, func_name));
+        Operand::Value(dest)
+    }
+
     pub fn call_virtual(&mut self, obj: Operand, idx: u32, args: Vec<Operand>) -> Operand {
         let dest = self.new_reg();
         self.emit(Instruction::CallVirtual(dest, obj, idx, args));

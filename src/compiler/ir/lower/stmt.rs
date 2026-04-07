@@ -27,11 +27,13 @@ impl Lowerer {
                         Expr::StringLiteral(_, _) | Expr::Template(_, _) => {
                             sem_ty = Some(Type::String);
                         }
-                        Expr::Call(name, _, _, _, _) => {
-                            if let Some((_, ret_ty)) = self.function_tys.get(name) {
-                                sem_ty = Some(ret_ty.clone());
-                                if let Type::Class(c) = ret_ty {
-                                    class_name = Some(c.clone());
+                        Expr::Call(callee, _, _, _, _) => {
+                            if let Expr::Variable(name, _) = &**callee {
+                                if let Some((_, ret_ty)) = self.function_tys.get(name) {
+                                    sem_ty = Some(ret_ty.clone());
+                                    if let Type::Class(c) = ret_ty {
+                                        class_name = Some(c.clone());
+                                    }
                                 }
                             }
                         }

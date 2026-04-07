@@ -60,7 +60,20 @@ impl Codegen {
                         "O_CREAT" => self.emitter.mov_imm(AsmRegister::X0, 512),
                         "O_TRUNC" => self.emitter.mov_imm(AsmRegister::X0, 1024),
                         "O_APPEND" => self.emitter.mov_imm(AsmRegister::X0, 8),
-                        _ => panic!("Undefined variable {}", name),
+                        _ => {
+                            if let Some(ty) = self.get_node_type(&span) {
+                                if let Type::Function { .. } = ty {
+                                    self.emitter
+                                        .output
+                                        .push_str(&format!("    adrp x0, _{}@PAGE\n", name));
+                                    self.emitter
+                                        .output
+                                        .push_str(&format!("    add x0, x0, _{}@PAGEOFF\n", name));
+                                    return;
+                                }
+                            }
+                            panic!("Undefined variable {}", name)
+                        }
                     }
                 }
                 if let Some(ty) = self.get_node_type(&span) {
@@ -670,29 +683,132 @@ impl Codegen {
                     self.emitter.call(&method_label);
                 }
             }
-            Expr::Call(name, _, _, args, _) => {
+            Expr::Call(callee, _, _, args, _) => {
+                // Prepare arguments on stack
                 for arg in &args {
                     self.generate_expr(arg.clone());
                     self.emitter.push(AsmRegister::X0);
                 }
+                // Pop arguments into registers x0-x7
                 for i in (0..args.len().min(8)).rev() {
                     self.emitter
                         .output
                         .push_str(&format!("    ldr x{}, [sp], 16\n", i));
                 }
-                if self.variables.contains_key(&name) {
-                    if let Some((offset, _)) = self.variables.get(&name) {
-                        self.load_local("x16", *offset);
+
+                if let Expr::Variable(ref name, _) = *callee {
+                    if self.variables.contains_key(name) {
+                        let (offset, _) = *self.variables.get(name).unwrap();
+                        self.load_local("x16", offset);
                         self.emitter.output.push_str("    blr x16\n");
+                    } else if self.global_variables.contains_key(name) {
+                        let (label, _) = self.global_variables.get(name).unwrap();
+                        self.emitter
+                            .output
+                            .push_str(&format!("    adrp x16, {}@PAGE\n", label));
+                        self.emitter
+                            .output
+                            .push_str(&format!("    ldr x16, [x16, {}@PAGEOFF]\n", label));
+                        self.emitter.output.push_str("    blr x16\n");
+                    } else {
+                        let call_label = if name == "main" {
+                            "_main_aura".to_string()
+                        } else {
+                            format!("_{}", name)
+                        };
+                        self.emitter.call(&call_label);
                     }
                 } else {
-                    let call_label = if name == "main" {
-                        "_main_aura".to_string()
-                    } else {
-                        format!("_{}", name)
-                    };
-                    self.emitter.call(&call_label);
+                    // Complex callee expression: evaluate, push to stack, evaluate args, pop args, pop callee, blr
+                    self.generate_expr(*callee.clone());
+                    self.emitter.push(AsmRegister::X0);
+
+                    // Prepare arguments on stack
+                    for arg in &args {
+                        self.generate_expr(arg.clone());
+                        self.emitter.push(AsmRegister::X0);
+                    }
+
+                    // Pop arguments into registers x0-x7
+                    for i in (0..args.len().min(8)).rev() {
+                        self.emitter
+                            .output
+                            .push_str(&format!("    ldr x{}, [sp], 16\n", i));
+                    }
+                    // Pop callee into x16
+                    self.emitter.output.push_str("    ldr x16, [sp], 16\n");
+                    self.emitter.output.push_str("    blr x16\n");
                 }
+            }
+            Expr::Function {
+                params,
+                return_ty: _,
+                body,
+                is_async: _,
+                span: _,
+            } => {
+                let lambda_label = self.new_label("lambda");
+                let end_label = self.new_label("lambda_end");
+
+                self.emitter
+                    .output
+                    .push_str(&format!("    b {}\n", end_label));
+                self.emitter
+                    .output
+                    .push_str(&format!("{}:\n", lambda_label));
+
+                // Prologue
+                self.emitter
+                    .output
+                    .push_str("    stp x29, x30, [sp, -16]!\n");
+                self.emitter.output.push_str("    mov x29, sp\n");
+                self.emitter.output.push_str("    sub sp, sp, #256\n");
+
+                let saved_vars = self.variables.clone();
+                let saved_offset = self.stack_offset;
+                let old_fn_end = self.current_fn_end.clone();
+                let lambda_fn_end = self.new_label("lambda_ret");
+                self.current_fn_end = Some(lambda_fn_end.clone());
+                self.variables.clear();
+                self.stack_offset = 0;
+
+                let mut current_arg_reg = 0;
+                for (pname, ty_expr) in params {
+                    let pty = self
+                        .get_node_type(&ty_expr.span())
+                        .cloned()
+                        .unwrap_or(Type::Error);
+                    self.stack_offset += 16;
+                    self.variables
+                        .insert(pname.clone(), (self.stack_offset, pty));
+                    if current_arg_reg < 8 {
+                        self.store_local(&format!("x{}", current_arg_reg), self.stack_offset);
+                        current_arg_reg += 1;
+                    }
+                }
+
+                self.generate_statement(*body);
+
+                self.emitter
+                    .output
+                    .push_str(&format!("{}:\n", lambda_fn_end));
+                self.emitter.output.push_str("    add sp, sp, #256\n");
+                self.emitter.output.push_str("    ldp x29, x30, [sp], 16\n");
+                self.emitter.output.push_str("    ret\n");
+
+                self.emitter.output.push_str(&format!("{}:\n", end_label));
+
+                // Load address into x0
+                self.emitter
+                    .output
+                    .push_str(&format!("    adrp x0, {}@PAGE\n", lambda_label));
+                self.emitter
+                    .output
+                    .push_str(&format!("    add x0, x0, {}@PAGEOFF\n", lambda_label));
+
+                self.variables = saved_vars;
+                self.stack_offset = saved_offset;
+                self.current_fn_end = old_fn_end;
             }
             Expr::UnaryOp(op, expr, _) => {
                 self.generate_expr(*expr);

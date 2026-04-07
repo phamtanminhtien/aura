@@ -29,6 +29,8 @@ pub struct Lowerer {
     pub(crate) next_method_idx: u32,
     pub(crate) enums: HashMap<String, HashMap<String, (Operand, Type)>>,
     pub(crate) last_expr_ty: Type,
+    pub(crate) generated_functions: Vec<IrFunction>,
+    pub(crate) lambda_index: u32,
 }
 
 impl Lowerer {
@@ -48,6 +50,8 @@ impl Lowerer {
             next_method_idx: 0,
             enums: HashMap::new(),
             last_expr_ty: Type::Error,
+            generated_functions: Vec::new(),
+            lambda_index: 0,
         }
     }
 
@@ -431,6 +435,8 @@ impl Lowerer {
                 None,
             ));
         }
+
+        functions.extend(self.generated_functions.drain(..));
 
         IrModule {
             functions,

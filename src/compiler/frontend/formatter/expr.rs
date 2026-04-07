@@ -46,8 +46,8 @@ pub(crate) fn format_expr(f: &mut Formatter, expr: &Expr) {
             f.result.push_str(" = ");
             format_expr(f, val);
         }
-        Expr::Call(name, type_args, _, args, _) => {
-            f.result.push_str(name);
+        Expr::Call(callee, type_args, _, args, _) => {
+            format_expr(f, callee);
             if !type_args.is_empty() {
                 f.result.push('<');
                 for (i, ta) in type_args.iter().enumerate() {
@@ -206,6 +206,33 @@ pub(crate) fn format_expr(f: &mut Formatter, expr: &Expr) {
             }
             f.result.push(')');
         }
+        Expr::Function {
+            params,
+            return_ty,
+            body,
+            is_async,
+            ..
+        } => {
+            if *is_async {
+                f.result.push_str("async ");
+            }
+            f.result.push_str("fn(");
+            for (i, (name, ty)) in params.iter().enumerate() {
+                if i > 0 {
+                    f.result.push_str(", ");
+                }
+                f.result.push_str(name);
+                f.result.push_str(": ");
+                f.format_type_expr(ty);
+            }
+            f.result.push(')');
+            if let Some(ret) = return_ty {
+                f.result.push_str(": ");
+                f.format_type_expr(ret);
+            }
+            f.result.push(' ');
+            f.format_statement(body);
+        }
         Expr::Error(_) => f.result.push_str("/* ERROR */"),
     }
 }
@@ -222,7 +249,8 @@ fn get_expr_precedence(expr: &Expr) -> i32 {
         | Expr::MemberAccess(_, _, _, _)
         | Expr::Index(_, _, _)
         | Expr::IndexAssign(_, _, _, _)
-        | Expr::New(_, _, _, _, _) => 14, // Postfix/Primary-like are strongest
+        | Expr::New(_, _, _, _, _)
+        | Expr::Function { .. } => 14, // Postfix/Primary-like are strongest
         _ => 15,                      // Primary (numbers, variables, etc.)
     }
 }

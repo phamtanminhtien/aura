@@ -61,6 +61,18 @@ impl Codegen {
             .and_then(|m| m.get(span))
     }
 
+    fn next_label_id(&mut self) -> usize {
+        let id = self.label_count;
+        self.label_count += 1;
+        id
+    }
+
+    fn resolve_type(&self, ty_expr: crate::compiler::ast::TypeExpr) -> Type {
+        self.get_node_type(&ty_expr.span())
+            .cloned()
+            .unwrap_or(Type::Error)
+    }
+
     fn is_string_enum(&self, enum_name: &str) -> bool {
         if let Some(members) = self.enums.get(enum_name) {
             members
@@ -134,8 +146,12 @@ impl Codegen {
         }
 
         let has_explicit_main_call = global_stmts.iter().any(|(_, stmt)| {
-            if let Statement::Expression(Expr::Call(ref name, _, _, _, _), _) = stmt {
-                name == "main"
+            if let Statement::Expression(Expr::Call(ref callee, _, _, _, _), _) = stmt {
+                if let Expr::Variable(ref name, _) = **callee {
+                    name == "main"
+                } else {
+                    false
+                }
             } else {
                 false
             }
@@ -695,7 +711,7 @@ impl Codegen {
                     .output
                     .push_str(&format!("    lea {}(%rip), %rax\n", label));
             }
-            Expr::Variable(name, _) => {
+            Expr::Variable(name, span) => {
                 if let Some((offset, _)) = self.variables.get(&name) {
                     self.load_local(Register::RAX, *offset);
                 } else if let Some((label, _)) = self.global_variables.get(&name) {
@@ -709,7 +725,17 @@ impl Codegen {
                         "true" => self.emitter.mov_imm(Register::RAX, 1),
                         "false" => self.emitter.mov_imm(Register::RAX, 0),
                         "null" => self.emitter.mov_imm(Register::RAX, 0),
-                        _ => panic!("Undefined variable {}", name),
+                        _ => {
+                            if let Some(ty) = self.get_node_type(&span) {
+                                if let Type::Function { .. } = ty {
+                                    self.emitter
+                                        .output
+                                        .push_str(&format!("    lea {}(%rip), %rax\n", name));
+                                    return;
+                                }
+                            }
+                            panic!("Undefined variable {}", name)
+                        }
                     }
                 }
             }
@@ -765,7 +791,7 @@ impl Codegen {
                     _ => panic!("Unsupported binary operator {}", op),
                 }
             }
-            Expr::Call(name, _, _, args, _) => {
+            Expr::Call(callee, _, _, args, _) => {
                 let arg_regs = [
                     Register::RDI,
                     Register::RSI,
@@ -774,6 +800,13 @@ impl Codegen {
                     Register::R8,
                     Register::R9,
                 ];
+                // For complex callee, evaluate it first and push to stack
+                let is_direct = matches!(&*callee, Expr::Variable(_, _));
+                if !is_direct {
+                    self.generate_expr(*callee.clone());
+                    self.emitter.push(Register::RAX);
+                }
+
                 for (i, arg) in args.into_iter().enumerate() {
                     self.generate_expr(arg);
                     if i < arg_regs.len() {
@@ -782,7 +815,76 @@ impl Codegen {
                         self.emitter.push(Register::RAX);
                     }
                 }
-                self.emitter.call(&name);
+
+                if let Expr::Variable(ref name, _) = *callee {
+                    self.emitter.call(name);
+                } else {
+                    self.emitter.pop(Register::RAX);
+                    self.emitter.output.push_str("    call *%rax\n");
+                }
+            }
+            Expr::Function {
+                params,
+                return_ty: _,
+                body,
+                is_async: _,
+                span: _,
+            } => {
+                let func_id = self.next_label_id();
+                let func_label = format!("_lambda_{}", func_id);
+                let skip_label = format!("_lambda_skip_{}", func_id);
+
+                self.emitter
+                    .output
+                    .push_str(&format!("    jmp {}\n", skip_label));
+                self.emitter.output.push_str(&format!("{}:\n", func_label));
+
+                // Prologue
+                self.emitter.push(Register::RBP);
+                self.emitter.mov_reg(Register::RBP, Register::RSP);
+                self.emitter.output.push_str("    sub $256, %rsp\n");
+
+                let saved_vars = self.variables.clone();
+                let saved_offset = self.stack_offset;
+                self.stack_offset = 0;
+
+                let arg_regs = [
+                    Register::RDI,
+                    Register::RSI,
+                    Register::RDX,
+                    Register::RCX,
+                    Register::R8,
+                    Register::R9,
+                ];
+
+                for (i, (pname, pty_expr)) in params.iter().enumerate() {
+                    let pty = self.resolve_type(pty_expr.clone());
+                    self.stack_offset += 8;
+                    self.variables
+                        .insert(pname.clone(), (self.stack_offset, pty));
+                    if i < arg_regs.len() {
+                        self.emitter.mov_reg_to_mem(
+                            arg_regs[i],
+                            -(self.stack_offset as i32),
+                            Register::RBP,
+                        );
+                    }
+                }
+
+                self.generate_statement(*body);
+
+                // Epilogue
+                self.emitter.mov_reg(Register::RSP, Register::RBP);
+                self.emitter.pop(Register::RBP);
+                self.emitter.ret();
+
+                self.emitter.output.push_str(&format!("{}:\n", skip_label));
+                self.emitter
+                    .output
+                    .push_str(&format!("    lea {}(%rip), %rax\n", func_label));
+
+                self.variables = saved_vars;
+                self.stack_offset = saved_offset;
             }
             Expr::MemberAccess(_obj, _member, _, _) => {
                 // Placeholder for member access

@@ -90,6 +90,47 @@ impl std::fmt::Debug for Value {
     }
 }
 
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Int(i) => write!(f, "{}", i),
+            Value::Int64(i) => write!(f, "{}", i),
+            Value::Float(val) => {
+                if val.fract() == 0.0 {
+                    write!(f, "{:.1}", val)
+                } else {
+                    write!(f, "{}", val)
+                }
+            }
+            Value::String(s) => write!(f, "{}", s),
+            Value::Boolean(b) => write!(f, "{}", b),
+            Value::Instance(name, _) => write!(f, "<Instance of {}>", name),
+            Value::Function { name, .. } => {
+                if let Some(n) = name {
+                    write!(f, "<Function {}>", n)
+                } else {
+                    write!(f, "<Anonymous Function>")
+                }
+            }
+            Value::Void => write!(f, "void"),
+            Value::Null => write!(f, "null"),
+            Value::Class(name) => write!(f, "<Class {}>", name),
+            Value::Array(elems) => {
+                write!(f, "[")?;
+                for (i, elem) in elems.borrow().iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", elem)?;
+                }
+                write!(f, "]")
+            }
+            Value::Promise(_) => write!(f, "<Promise>"),
+            Value::NativeFunction(_) => write!(f, "<Native Function>"),
+        }
+    }
+}
+
 impl Value {
     pub fn is_truthy(&self) -> bool {
         match self {

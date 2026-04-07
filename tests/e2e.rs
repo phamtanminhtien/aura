@@ -224,6 +224,7 @@ e2e_test!(fn_basic, "03_functions/01_basic.aura");
 e2e_test!(fn_recursion, "03_functions/02_recursion.aura");
 e2e_test!(fn_nested, "03_functions/03_nested.aura");
 e2e_test!(fn_return_string, "03_functions/04_return_string.aura");
+e2e_test!(fn_callbacks, "03_functions/05_callbacks.aura");
 
 // --- 04_oop ---
 e2e_test!(oop_basic, "04_oop/01_basic.aura");
