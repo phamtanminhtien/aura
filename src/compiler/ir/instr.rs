@@ -71,10 +71,12 @@ pub enum Instruction {
     StackAlloc(u32, u32),            // dest, size
 
     // Casts
-    IToF(u32, Operand),               // dest, src
-    FToI(u32, Operand),               // dest, src
-    FCall(u32, String, Vec<Operand>), // dest, name, args (using D registers)
-    LoadVTableAddress(u32, String),   // dest, class_name
+    IToF(u32, Operand),                       // dest, src
+    FToI(u32, Operand),                       // dest, src
+    FCall(u32, String, Vec<Operand>),         // dest, name, args (using D registers)
+    LoadVTableAddress(u32, String),           // dest, class_name
+    CallIndirect(u32, Operand, Vec<Operand>), // dest, function_ptr, args
+    LoadFunctionAddress(u32, String),         // dest, function_name
 }
 
 #[derive(Debug, Clone)]
@@ -193,6 +195,17 @@ impl std::fmt::Display for Instruction {
             Instruction::FToI(d, s) => write!(f, "  %{} = ftoi {}", d, s),
             Instruction::LoadVTableAddress(d, class) => {
                 write!(f, "  %{} = load_vtable_addr {}", d, class)
+            }
+            Instruction::CallIndirect(d, func, args) => {
+                let args_str = args
+                    .iter()
+                    .map(|a| a.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "  %{} = call_indirect {} {}", d, func, args_str)
+            }
+            Instruction::LoadFunctionAddress(d, name) => {
+                write!(f, "  %{} = load_func_addr {}", d, name)
             }
         }
     }

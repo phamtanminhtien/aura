@@ -337,6 +337,24 @@ impl Parser {
                 Expr::Await(Box::new(expr), s)
             }
             TokenKind::OpenBracket => self.parse_array_literal(),
+            TokenKind::Function => self.parse_function_expression(false),
+            TokenKind::Async => {
+                if self.peek_n(1).kind == TokenKind::Function {
+                    self.advance();
+                    self.parse_function_expression(true)
+                } else {
+                    if !self.panic_mode {
+                        let token = self.peek();
+                        self.diagnostics.push(Diagnostic::error(
+                            "Expected function after async in expression".to_string(),
+                            token.line,
+                            token.column,
+                        ));
+                        self.panic_mode = true;
+                    }
+                    Expr::Error(s)
+                }
+            }
             _ => {
                 if !self.panic_mode {
                     let token = self.peek();
@@ -434,21 +452,10 @@ impl Parser {
                     }
                     let _ = self.consume(TokenKind::CloseParen);
 
-                    if let Expr::Variable(name, name_span) = node.clone() {
-                        node = Expr::Call(name, type_args, name_span, args, s);
-                    } else if let Expr::MemberAccess(obj, member, name_span, _) = node.clone() {
+                    if let Expr::MemberAccess(obj, member, name_span, _) = node.clone() {
                         node = Expr::MethodCall(obj, member, type_args, name_span, args, s);
                     } else {
-                        if !self.panic_mode {
-                            let token = self.peek();
-                            self.diagnostics.push(Diagnostic::error(
-                                "Invalid call target".to_string(),
-                                token.line,
-                                token.column,
-                            ));
-                            self.panic_mode = true;
-                        }
-                        node = Expr::Error(s);
+                        node = Expr::Call(Box::new(node), type_args, s, args, s);
                     }
                 }
                 TokenKind::OpenBracket => {
@@ -461,5 +468,46 @@ impl Parser {
             }
         }
         node
+    }
+
+    pub(crate) fn parse_function_expression(&mut self, is_async: bool) -> Expr {
+        let s = self.span();
+        let _ = self.consume(TokenKind::Function);
+
+        let _ = self.parse_type_params();
+
+        let _ = self.consume(TokenKind::OpenParen);
+        let mut params = Vec::new();
+        while self.peek().kind != TokenKind::CloseParen && !self.is_at_end() {
+            if let TokenKind::Identifier(pname) = self.peek().kind.clone() {
+                self.advance();
+                let _ = self.consume(TokenKind::Colon);
+                let pty = self.parse_type_expr();
+                params.push((pname, pty));
+                if self.peek().kind == TokenKind::Comma {
+                    self.advance();
+                }
+            } else {
+                break;
+            }
+        }
+        let _ = self.consume(TokenKind::CloseParen);
+
+        let return_ty = if self.peek().kind == TokenKind::Colon {
+            self.advance();
+            Some(self.parse_type_expr())
+        } else {
+            None
+        };
+
+        let body = Box::new(self.parse_block());
+
+        Expr::Function {
+            params,
+            return_ty,
+            body,
+            is_async,
+            span: s,
+        }
     }
 }

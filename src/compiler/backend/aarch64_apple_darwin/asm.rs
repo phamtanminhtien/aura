@@ -435,9 +435,17 @@ impl Emitter {
                 .push_str(&format!("    fmov {}, x16\n", reg.name()));
         }
     }
-
     pub fn call(&mut self, label: &str) {
         self.output.push_str(&format!("    bl {}\n", label));
+    }
+
+    pub fn blr(&mut self, reg: Register) {
+        self.output.push_str(&format!("    blr {}\n", reg.name()));
+    }
+
+    pub fn load_label(&mut self, reg: Register, label: &str) {
+        self.output
+            .push_str(&format!("    ldr {}, ={}\n", reg.name(), label));
     }
 
     pub fn push(&mut self, reg: Register) {

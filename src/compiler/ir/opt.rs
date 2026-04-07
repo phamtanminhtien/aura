@@ -352,6 +352,17 @@ impl Optimizer {
                         Instruction::LoadVTableAddress(dest, class) => {
                             new_instrs.push(Instruction::LoadVTableAddress(dest, class));
                         }
+                        Instruction::CallIndirect(dest, func, args) => {
+                            let new_func = self.resolve_operand(&func, &constants);
+                            let new_args = args
+                                .into_iter()
+                                .map(|a| self.resolve_operand(&a, &constants))
+                                .collect();
+                            new_instrs.push(Instruction::CallIndirect(dest, new_func, new_args));
+                        }
+                        Instruction::LoadFunctionAddress(dest, name) => {
+                            new_instrs.push(Instruction::LoadFunctionAddress(dest, name));
+                        }
                     }
                 }
                 block.instructions = new_instrs;

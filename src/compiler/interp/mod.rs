@@ -55,15 +55,44 @@ impl Interpreter {
             .insert("false".to_string(), Value::Boolean(false));
         interp.env.insert("null".to_string(), Value::Null);
 
+        // Register built-in functions
+        interp.env.insert(
+            "print_i32".to_string(),
+            Value::NativeFunction(Rc::new(|args| {
+                if let Some(arg) = args.first() {
+                    match arg {
+                        Value::Int(i) => println!("{}", i),
+                        Value::Int64(i) => println!("{}", i),
+                        _ => println!("{:?}", arg),
+                    }
+                }
+                Value::Void
+            })),
+        );
+        interp.env.insert(
+            "print_f64".to_string(),
+            Value::NativeFunction(Rc::new(|args| {
+                if let Some(arg) = args.first() {
+                    match arg {
+                        Value::Float(f) => println!("{}", f),
+                        _ => println!("{:?}", arg),
+                    }
+                }
+                Value::Void
+            })),
+        );
+
         interp
     }
 
     pub fn interpret(&mut self, program: Program) {
         let mut has_explicit_main_call = false;
         for stmt in &program.statements {
-            if let Statement::Expression(Expr::Call(ref name, _, _, _, _), _) = stmt {
-                if name == "main" {
-                    has_explicit_main_call = true;
+            if let Statement::Expression(Expr::Call(ref callee, _, _, _, _), _) = stmt {
+                if let Expr::Variable(ref name, _) = **callee {
+                    if name == "main" {
+                        has_explicit_main_call = true;
+                    }
                 }
             }
         }

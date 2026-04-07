@@ -443,13 +443,28 @@ impl<'a> Lexer<'a> {
         let line = self.line;
         let column = self.column;
         self.advance(); // skip opening "
-        let start_pos = self.pos;
+        let mut literal = String::new();
 
         while !self.is_at_end() && self.peek() != '"' {
             if self.peek() == '\\' {
                 self.advance(); // skip \
                 if !self.is_at_end() {
-                    self.advance(); // skip escaped char
+                    let escaped = self.advance();
+                    match escaped {
+                        'n' => literal.push('\n'),
+                        'r' => literal.push('\r'),
+                        't' => literal.push('\t'),
+                        '\\' => literal.push('\\'),
+                        '"' => literal.push('"'),
+                        _ => {
+                            self.diagnostics.push(Diagnostic::error(
+                                format!("Unknown escape sequence: \\{}", escaped),
+                                line,
+                                self.column,
+                            ));
+                            literal.push(escaped);
+                        }
+                    }
                 }
                 continue;
             }
@@ -457,10 +472,9 @@ impl<'a> Lexer<'a> {
                 self.line += 1;
                 self.column = 1;
             }
-            self.advance();
+            literal.push(self.advance());
         }
 
-        let literal = &self.source[start_pos..self.pos];
         if !self.is_at_end() {
             self.advance(); // skip closing "
         } else {
@@ -470,7 +484,7 @@ impl<'a> Lexer<'a> {
                 column,
             ));
         }
-        Token::new(TokenKind::StringLiteral(literal.to_string()), line, column)
+        Token::new(TokenKind::StringLiteral(literal), line, column)
     }
 
     fn lex_identifier(&mut self) -> Token {

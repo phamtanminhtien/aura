@@ -107,6 +107,19 @@ impl Emitter {
         self.output.push_str(&format!("    pop %{}\n", reg.name()));
     }
 
+    pub fn ret(&mut self) {
+        self.output.push_str("    ret\n");
+    }
+
+    pub fn mov_reg_to_mem(&mut self, src: Register, offset: i32, base: Register) {
+        self.output.push_str(&format!(
+            "    mov %{}, {}(%{})\n",
+            src.name(),
+            offset,
+            base.name()
+        ));
+    }
+
     pub fn finalize(self) -> String {
         self.output
     }

@@ -104,6 +104,10 @@ impl Lowerer {
                             offset,
                         ));
                     Operand::Value(dest)
+                } else if self.function_tys.contains_key(&name) {
+                    let (p_tys, r_ty) = self.function_tys.get(&name).unwrap().clone();
+                    self.last_expr_ty = Type::Function(vec![], p_tys, Box::new(r_ty));
+                    return self.builder.load_func_addr(name);
                 } else if self.class_structures.contains_key(&name) {
                     self.last_expr_ty = Type::Class(name);
                     Operand::Constant(0) // Class constant is 0
@@ -187,40 +191,71 @@ impl Lowerer {
                     }
                 }
             }
-            Expr::Call(name, _type_args, _name_span, args, _span) => {
-                let (p_tys, r_ty) = self
-                    .function_tys
-                    .get(&name)
-                    .cloned()
-                    .unwrap_or((vec![], Type::Error));
+            Expr::Call(callee, _type_args, _name_span, args, _span) => {
                 let mut ir_args = Vec::new();
-                for (i, a) in args.into_iter().enumerate() {
-                    let mut op = self.lower_expr(a);
-                    let arg_ty = self.last_expr_ty.clone();
-
-                    if let Some(pty) = p_tys.get(i) {
-                        if let Type::Union(_) = pty {
-                            // If the argument is already a union, decompose it
-                            if let Type::Union(_) = arg_ty {
-                                // For now, we only handle union variables as arguments
-                                // Complex union expressions would need a temp slot
-                                // But they are likely variables anyway
-                            }
-                            // Always promote to union (tag, value)
-                            let tag = arg_ty.tag();
-                            ir_args.push(Operand::Constant(tag));
-                            ir_args.push(op);
-                            continue;
-                        }
-
-                        if pty.is_float() && arg_ty.is_integer() {
-                            op = self.builder.itof(op);
-                        }
-                    }
-                    ir_args.push(op);
+                for a in args {
+                    ir_args.push(self.lower_expr(a));
                 }
-                self.last_expr_ty = r_ty;
-                self.builder.call(name, ir_args)
+
+                // If callee is a variable, check if it's a direct function call
+                if let Expr::Variable(ref name, _) = *callee {
+                    if !self.mem_vars.contains_key(name) && self.function_tys.contains_key(name) {
+                        let (_, r_ty) = self.function_tys.get(name).unwrap().clone();
+                        self.last_expr_ty = r_ty;
+                        return self.builder.call(name.clone(), ir_args);
+                    }
+                }
+
+                // Evaluate callee then call indirect
+                let callee_op = self.lower_expr(*callee);
+                if let Type::Function(_, _, ref r_ty) = self.last_expr_ty.clone() {
+                    self.last_expr_ty = (**r_ty).clone();
+                }
+
+                self.builder.call_indirect(callee_op, ir_args)
+            }
+            Expr::Function {
+                params,
+                body,
+                return_ty,
+                is_async,
+                ..
+            } => {
+                let lambda_name = format!("lambda_{}", self.lambda_index);
+                self.lambda_index += 1;
+
+                let p_tys: Vec<Type> = params
+                    .iter()
+                    .map(|(_, t)| self.resolve_type(t.clone()))
+                    .collect();
+                let r_ty = if let Some(te) = return_ty {
+                    self.resolve_type(te.clone())
+                } else {
+                    Type::Void
+                };
+
+                let func_ty = Type::Function(vec![], p_tys.clone(), Box::new(r_ty.clone()));
+
+                // Save current state
+                let old_builder = std::mem::replace(
+                    &mut self.builder,
+                    crate::compiler::ir::builder::IrBuilder::new(),
+                );
+                let old_mem_vars =
+                    std::mem::replace(&mut self.mem_vars, std::collections::HashMap::new());
+                let old_class = self.current_class.take();
+
+                // Build lambda
+                let ir_func = self.lower_function(lambda_name.clone(), params, *body, None);
+                self.generated_functions.push(ir_func);
+
+                // Restore state
+                self.builder = old_builder;
+                self.mem_vars = old_mem_vars;
+                self.current_class = old_class;
+
+                self.last_expr_ty = func_ty;
+                self.builder.load_func_addr(lambda_name)
             }
             Expr::Assign(name, value, _) => {
                 let mut val_op = self.lower_expr(*value);

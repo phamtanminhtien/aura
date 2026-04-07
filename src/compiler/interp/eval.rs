@@ -523,8 +523,8 @@ impl Interpreter {
                 self.env.assign(&name, val.clone());
                 val
             }
-            Expr::Call(name, _, _, args, _) => {
-                let func = self.env.lookup(&name).expect("Function not found");
+            Expr::Call(callee, _, _, args, _) => {
+                let func = self.eval_expr(*callee);
                 if let Value::Function {
                     name: _,
                     params,
@@ -532,7 +532,7 @@ impl Interpreter {
                     body,
                     is_async: _,
                     captured_env: _,
-                } = func
+                } = &func
                 {
                     let mut arg_vals = Vec::new();
                     for a in args {
@@ -550,7 +550,7 @@ impl Interpreter {
                         }
                         self.env.insert(pname.clone(), val);
                     }
-                    let res = self.execute_statement(body);
+                    let res = self.execute_statement(body.clone());
                     self.pop_scope();
                     if let StatementResult::Return(v) = res {
                         v
@@ -567,7 +567,7 @@ impl Interpreter {
                     }
                     f(arg_vals)
                 } else {
-                    panic!("Not a function");
+                    panic!("Not a function: {:?}", func);
                 }
             }
             Expr::MethodCall(obj_expr, method, _, _, args, _) => {
@@ -959,6 +959,32 @@ impl Interpreter {
                     self.eval_expr(*truthy)
                 } else {
                     self.eval_expr(*falsy)
+                }
+            }
+            Expr::Function {
+                params,
+                return_ty,
+                body,
+                is_async,
+                ..
+            } => {
+                let mut resolved_params = Vec::new();
+                for (pname, pty_expr) in params {
+                    resolved_params.push((pname, self.resolve_type(pty_expr)));
+                }
+                let resolved_ret = if let Some(re) = return_ty {
+                    self.resolve_type(re)
+                } else {
+                    Type::Void
+                };
+
+                Value::Function {
+                    name: None,
+                    params: resolved_params,
+                    return_ty: resolved_ret,
+                    body: *body,
+                    is_async,
+                    captured_env: self.env_stack.clone(),
                 }
             }
             Expr::Error(_) => panic!("Compiler bug: reaching error node in interpreter"),

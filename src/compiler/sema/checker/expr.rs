@@ -193,27 +193,25 @@ impl SemanticAnalyzer {
                 }
                 val_ty
             }
-            Expr::Call(name, type_args, name_span, args, span) => {
+            Expr::Call(callee, type_args, _name_span, args, span) => {
+                let callee_ty = self.check_expr(*callee.clone());
                 let arg_spans: Vec<_> = args.iter().map(|a| a.span()).collect();
                 let mut arg_tys = Vec::new();
-                for arg in args {
-                    arg_tys.push(self.check_expr(arg));
+                for arg in &args {
+                    arg_tys.push(self.check_expr(arg.clone()));
                 }
 
-                let mut _resolved_type_args = Vec::new();
+                let mut resolved_type_args = Vec::new();
                 for ta in type_args {
-                    _resolved_type_args.push(self.resolve_type(ta));
+                    resolved_type_args.push(self.resolve_type(ta.clone()));
                 }
 
-                let sym = self.scope.lookup(&name);
-                let function_ty = sym.map(|s| s.ty.clone());
-
-                if let Some(Type::Function(type_params, param_tys, ret_ty)) = function_ty {
+                if let Type::Function(type_params, param_tys, ret_ty) = callee_ty {
                     let mut mapping = HashMap::new();
-                    if _resolved_type_args.is_empty() && !type_params.is_empty() {
+                    if resolved_type_args.is_empty() && !type_params.is_empty() {
                         mapping = self.infer_type_args(&type_params, &param_tys, &arg_tys);
-                    } else if !_resolved_type_args.is_empty() {
-                        for (param, arg) in type_params.iter().zip(_resolved_type_args.iter()) {
+                    } else if !resolved_type_args.is_empty() {
+                        for (param, arg) in type_params.iter().zip(resolved_type_args.iter()) {
                             mapping.insert(param.name.clone(), arg.clone());
                         }
                     }
@@ -225,31 +223,13 @@ impl SemanticAnalyzer {
                     let substituted_ret = self.substitute(&ret_ty, &mapping);
 
                     if self.record_node_info {
-                        if let Some(sym) = self.scope.lookup(&name) {
-                            let doc = sym.doc.clone();
-                            let sym_span = sym.span;
-                            let defined_in = sym.defined_in.clone();
-                            if let Some(d) = doc {
-                                self.record_doc(name_span, d);
-                            }
-                            self.record_definition(name_span, defined_in, sym_span);
-                            self.record_type(
-                                name_span,
-                                Type::Function(
-                                    type_params.clone(),
-                                    param_tys.clone(),
-                                    ret_ty.clone(),
-                                ),
-                            );
-                        }
                         // Also record return type for the whole call span
                         self.record_type(span, substituted_ret.clone());
                     }
 
                     if substituted_params.len() != arg_tys.len() {
                         self.error(
-                            SemanticErrorKind::WrongArgumentCount(
-                                name,
+                            SemanticErrorKind::ArgumentCountMismatch(
                                 substituted_params.len(),
                                 arg_tys.len(),
                             ),
@@ -265,7 +245,7 @@ impl SemanticAnalyzer {
                                     format!("{:?}", substituted_params[i]),
                                     format!("{:?}", arg_ty),
                                 ),
-                                span,
+                                args[i].span(),
                             );
                         } else if arg_ty != &substituted_params[i] && self.record_node_info {
                             self.record_type(arg_spans[i], substituted_params[i].clone());
@@ -273,9 +253,68 @@ impl SemanticAnalyzer {
                     }
                     substituted_ret
                 } else {
-                    self.error(SemanticErrorKind::UndefinedFunction(name), name_span);
+                    if callee_ty != Type::Error {
+                        self.error(
+                            SemanticErrorKind::TypeMismatch(
+                                "Function".to_string(),
+                                format!("{}", callee_ty),
+                            ),
+                            span,
+                        );
+                    }
+
                     Type::Error
                 }
+            }
+            Expr::Function {
+                params,
+                return_ty,
+                body,
+                is_async,
+                span,
+            } => {
+                let mut resolved_params = Vec::new();
+                let mut param_names = Vec::new();
+
+                for (name, te) in params {
+                    let ty = self.resolve_type(te.clone());
+                    resolved_params.push(ty.clone());
+                    param_names.push((name.clone(), ty));
+                }
+
+                let resolved_ret = if let Some(te) = return_ty {
+                    self.resolve_type(te.clone())
+                } else {
+                    Type::Void
+                };
+
+                self.push_scope();
+
+                // TODO: Handle is_async for functions - currently just a flag
+                let _ = is_async;
+
+                for (name, ty) in param_names {
+                    self.scope.insert(
+                        name,
+                        ty.clone(),
+                        false,
+                        false,
+                        false,
+                        span,
+                        self.current_file.clone(),
+                        None,
+                    );
+                }
+
+                self.check_statement(*body);
+
+                self.pop_scope();
+
+                let func_ty = Type::Function(vec![], resolved_params, Box::new(resolved_ret));
+                if self.record_node_info {
+                    self.record_type(span, func_ty.clone());
+                }
+                func_ty
             }
             Expr::New(class_name, type_args, name_span, args, span) => {
                 let info_opt = self.classes.get(&class_name).cloned();

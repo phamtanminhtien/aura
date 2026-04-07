@@ -45,6 +45,9 @@ void print_float(double n) {
   fflush(stdout);
 }
 
+void print_i32(int64_t n) { print_num(n); }
+void print_f64(double n) { print_float(n); }
+
 int64_t aura_check_tag(int64_t val_tag, int64_t expected_tag) {
   return val_tag == expected_tag;
 }
